@@ -5,7 +5,6 @@ read, expired, malformed) the answer is the same 404, byte for byte.
 """
 
 import base64
-import binascii
 import mimetypes
 import os
 import re
@@ -40,20 +39,19 @@ MAX_TEXT_BYTES = 10 * 1024
 MAX_CIPHERTEXT_BYTES = (MAX_TEXT_BYTES // BLOCK_BYTES + 1) * BLOCK_BYTES + TAG_BYTES
 MAX_BODY_BYTES = 16 * 1024  # base64url of the largest ciphertext is ~14 KB
 
-_B64URL = re.compile(r"[A-Za-z0-9_-]*")
 _ID = re.compile(rf"[A-Za-z0-9_-]{{{ID_LENGTH}}}")
 
 
 def b64url_decode(value: object) -> bytes:
-    """Strict base64url without padding. Rejects anything that does not round-trip."""
-    if not isinstance(value, str) or not _B64URL.fullmatch(value):
-        raise ValueError("must be base64url without padding")
+    """Strict base64url without padding: the text must be exactly what encoding the bytes gives."""
+    if not isinstance(value, str):
+        raise ValueError("must be a string")
     try:
         raw = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
-    except binascii.Error as exc:
+    except ValueError as exc:
         raise ValueError("invalid base64url") from exc
-    if base64.urlsafe_b64encode(raw).rstrip(b"=").decode() != value:
-        raise ValueError("non-canonical base64url")
+    if b64url_encode(raw) != value:
+        raise ValueError("not canonical base64url without padding")
     return raw
 
 
