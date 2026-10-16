@@ -175,7 +175,7 @@ def test_a_link_without_the_whole_key_says_so_and_never_calls_the_server(
     tab.open_link(f"{tab.base}/s/{secret_id}{fragment}")
     expect(tab.page.locator("#status")).to_contain_text("Incomplete link")
     expect(tab.page.locator("#reveal")).to_be_hidden()
-    tab.page.wait_for_load_state("networkidle")
+    tab.page.wait_for_timeout(300)  # a request made by the page script is recorded at once
     assert tab.api_calls() == []
     assert len(stored_keys(sync_redis)) == 1  # the secret is still there
     # and the complete link still works afterwards
