@@ -12,9 +12,12 @@ import pytest
 import pytest_asyncio
 from redis.asyncio import Redis
 
+from conftest import SERVER_KEYS
 from one_time_vault.app import MAX_CIPHERTEXT_BYTES, create_app
+from one_time_vault.keyring import Keyring
 from one_time_vault.storage import new_secret_id
 
+NONCE = re.compile(r"'nonce-[A-Za-z0-9_-]+'")
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{22}$")
 
 
@@ -28,9 +31,16 @@ def body(**over: Any) -> dict[str, Any]:
     return {**valid, **over}
 
 
+async def secret_count(redis: Redis) -> int:
+    """Stored secrets; the rate limit counters live in the same Redis and are not secrets."""
+    return len([k async for k in redis.scan_iter("ovv:s:*")])
+
+
 @pytest_asyncio.fixture
 async def client(redis: Redis) -> AsyncIterator[httpx.AsyncClient]:
-    transport = httpx.ASGITransport(app=create_app(redis))
+    transport = httpx.ASGITransport(
+        app=create_app(redis, Keyring.parse(SERVER_KEYS), create_limit=10_000)
+    )
     async with httpx.AsyncClient(transport=transport, base_url="http://vault.test") as c:
         yield c
 
@@ -87,7 +97,9 @@ async def test_expiry_names_become_seconds(
 
 
 async def _shape(res: httpx.Response) -> tuple[int, list[tuple[str, str]], bytes]:
-    headers = sorted((k, v) for k, v in res.headers.items() if k != "date")
+    headers = sorted(
+        (k, NONCE.sub("'nonce-N'", v)) for k, v in res.headers.items() if k != "date"
+    )  # the CSP nonce is random on purpose
     return res.status_code, headers, res.content
 
 
@@ -187,7 +199,7 @@ async def test_every_refusal_is_an_error_and_stores_nothing(
 ) -> None:
     res = await client.post("/api/secrets", json=BAD_REQUESTS[case])
     assert res.status_code == 422, (case, res.text[:200])
-    assert await redis.dbsize() == 0
+    assert await secret_count(redis) == 0
 
 
 @pytest.mark.parametrize("missing", ["iv", "ciphertext", "expires_in"])
@@ -197,7 +209,7 @@ async def test_missing_fields_are_refused(
     payload = body()
     del payload[missing]
     assert (await client.post("/api/secrets", json=payload)).status_code == 422
-    assert await redis.dbsize() == 0
+    assert await secret_count(redis) == 0
 
 
 @pytest.mark.parametrize("blocks", [1, 2, 41])
@@ -223,7 +235,7 @@ async def test_a_body_over_the_limit_is_413_by_content_length(
 ) -> None:
     res = await client.post("/api/secrets", content=b"x" * 200_000)
     assert res.status_code == 413
-    assert await redis.dbsize() == 0
+    assert await secret_count(redis) == 0
 
 
 async def test_a_streamed_body_over_the_limit_is_413_without_content_length(
@@ -237,7 +249,7 @@ async def test_a_streamed_body_over_the_limit_is_413_without_content_length(
     assert "content-length" not in req.headers
     res = await client.send(req)
     assert res.status_code == 413
-    assert await redis.dbsize() == 0
+    assert await secret_count(redis) == 0
 
 
 # Test 4 (API half): opening a link consumes nothing
@@ -274,7 +286,11 @@ async def test_the_open_page_is_the_same_for_every_id(
     client: httpx.AsyncClient,
 ) -> None:
     real, _ = await create(client)
-    pages = {(await client.get(f"/s/{sid}")).content for sid in (real, new_secret_id(), "nonsense")}
+    nonce = re.compile(rb'nonce="[A-Za-z0-9_-]+"')  # random on purpose, see test_headers.py
+    pages = {
+        nonce.sub(b"", (await client.get(f"/s/{sid}")).content)
+        for sid in (real, new_secret_id(), "nonsense")
+    }
     assert len(pages) == 1  # the page cannot tell a live id from a dead one
 
 

@@ -60,3 +60,13 @@ if n >= max then
 end
 return max - n
 """
+
+# KEYS[1] counter key; ARGV[1] window in milliseconds. Fixed window: the first hit starts it.
+# Returns {count including this hit, milliseconds left in the window}.
+RATE_COUNT = """
+local n = redis.call('INCR', KEYS[1])
+if n == 1 or redis.call('PTTL', KEYS[1]) < 0 then
+  redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[1]))
+end
+return {n, redis.call('PTTL', KEYS[1])}
+"""

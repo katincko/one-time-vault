@@ -6,6 +6,7 @@ Missing, already read and expired secrets are the same thing here: `NotFound`.
 import base64
 import hmac
 import secrets
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -80,11 +81,24 @@ class SecretStorage:
                 return secret_id
         raise RuntimeError("could not allocate a free secret id")
 
-    async def open(self, secret_id: str, verifier: bytes | None = None) -> OpenResult:
+    async def peek_verifier(self, secret_id: str) -> bytes | None:
+        """The stored verifier: None if the secret is gone, empty if it has no password."""
+        stored: Any = await self._peek(keys=[self._key(secret_id)])
+        return None if stored is None else bytes(stored)
+
+    async def open(
+        self,
+        secret_id: str,
+        verifier: bytes | None = None,
+        *,
+        bind: Callable[[bytes, bytes], bytes] | None = None,
+    ) -> OpenResult:
         """Deliver and delete a secret, or say why not.
 
         `verifier` is what the caller computed from the password it received. It is compared
-        here, in Python, in constant time.
+        here, in Python, in constant time. With `bind`, the stored value is a keyed form of the
+        verifier: `bind(stored, verifier)` gives the value the stored one would have if the
+        verifier is right, and that is what gets compared.
         """
         key = self._key(secret_id)
         if verifier is None:
@@ -94,7 +108,8 @@ class SecretStorage:
             return NotFound()
         if not stored:  # public secret: the extra verifier is irrelevant
             return await self._deliver(key, proven=False)
-        if hmac.compare_digest(bytes(stored), verifier):
+        expected = bytes(stored)
+        if hmac.compare_digest(expected, bind(expected, verifier) if bind else verifier):
             return await self._deliver(key, proven=True)
         left: Any = await self._fail(keys=[key], args=[self._max_attempts])
         return NotFound() if left == -1 else WrongPassword(attempts_left=int(left))

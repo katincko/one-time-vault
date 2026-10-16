@@ -17,12 +17,28 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict
+from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 from redis.asyncio import Redis
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from one_time_vault.storage import ID_LENGTH, Revealed, SecretStorage
+from one_time_vault.keyring import (
+    MAX_ITERATIONS,
+    MIN_ITERATIONS,
+    VERIFIER_BYTES,
+    Keyring,
+    iterations_of,
+)
+from one_time_vault.ratelimit import CreateLimiter, CreateLimitMiddleware
+from one_time_vault.security import SecurityHeadersMiddleware
+from one_time_vault.storage import (
+    ID_LENGTH,
+    NotFound,
+    PasswordRequired,
+    Revealed,
+    SecretStorage,
+    WrongPassword,
+)
 
 mimetypes.add_type("text/javascript", ".js")  # module scripts need it; the Windows registry lies
 
@@ -74,12 +90,36 @@ def _check_ciphertext(ct: bytes) -> bytes:
     return ct
 
 
+def _check_verifier(verifier: bytes) -> bytes:
+    if len(verifier) != VERIFIER_BYTES:
+        raise ValueError(f"verifier must be {VERIFIER_BYTES} bytes")
+    return verifier
+
+
+Verifier = Annotated[bytes, BeforeValidator(b64url_decode), AfterValidator(_check_verifier)]
+
+
 class CreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     iv: Annotated[bytes, BeforeValidator(b64url_decode), AfterValidator(_check_iv)]
     ciphertext: Annotated[bytes, BeforeValidator(b64url_decode), AfterValidator(_check_ciphertext)]
     expires_in: Literal["1h", "1d", "7d"]
+    # Access password: both fields or neither. The iterations tell the opener how to derive it.
+    password_verifier: Verifier | None = None
+    iterations: Annotated[int, Field(ge=MIN_ITERATIONS, le=MAX_ITERATIONS)] | None = None
+
+    @model_validator(mode="after")
+    def _password_fields_go_together(self) -> "CreateRequest":
+        if (self.password_verifier is None) != (self.iterations is None):
+            raise ValueError("password_verifier and iterations go together")
+        return self
+
+
+class RevealRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    verifier: Verifier
 
 
 class BodyLimitMiddleware:
@@ -130,15 +170,17 @@ class BodyLimitMiddleware:
 
 def _not_found() -> Response:
     """The one 404 for every id that cannot be opened. Built here only, so it cannot drift."""
-    return Response(
-        b'{"detail":"not found"}',
-        status_code=404,
-        media_type="application/json",
-        headers={"Cache-Control": "no-store"},
-    )
+    return Response(b'{"detail":"not found"}', status_code=404, media_type="application/json")
 
 
-def create_app(redis: Redis) -> FastAPI:
+def create_app(
+    redis: Redis,
+    keyring: Keyring,
+    *,
+    create_limit: int = 20,
+    create_window_seconds: int = 3600,
+    trusted_hops: int = 0,
+) -> FastAPI:
     storage = SecretStorage(redis)
     templates = Jinja2Templates(directory=HERE / "templates")
 
@@ -148,7 +190,11 @@ def create_app(redis: Redis) -> FastAPI:
         await redis.aclose()
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+    # Innermost first. The limiter sits outside the body limit so a refused body still counts.
     app.add_middleware(BodyLimitMiddleware, max_bytes=MAX_BODY_BYTES)
+    limiter = CreateLimiter(redis, limit=create_limit, window_seconds=create_window_seconds)
+    app.add_middleware(CreateLimitMiddleware, limiter=limiter, trusted_hops=trusted_hops)
+    app.add_middleware(SecurityHeadersMiddleware)
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 
     @app.get("/")
@@ -158,31 +204,43 @@ def create_app(redis: Redis) -> FastAPI:
     @app.api_route("/s/{secret_id}", methods=["GET", "HEAD"])
     async def open_page(request: Request, secret_id: str) -> Response:
         # Same page for every id and no storage access: opening a link consumes nothing.
-        return templates.TemplateResponse(
-            request, "open.html", headers={"Cache-Control": "no-store"}
-        )
+        return templates.TemplateResponse(request, "open.html")
 
     @app.post("/api/secrets", status_code=201)
     async def create(body: CreateRequest) -> Response:
-        secret_id = await storage.create(body.iv + body.ciphertext, TTL_SECONDS[body.expires_in])
-        return JSONResponse(
-            {"id": secret_id}, status_code=201, headers={"Cache-Control": "no-store"}
+        sealed = None
+        if body.password_verifier is not None and body.iterations is not None:
+            sealed = keyring.seal(body.password_verifier, body.iterations)
+        secret_id = await storage.create(
+            body.iv + body.ciphertext, TTL_SECONDS[body.expires_in], verifier=sealed
         )
+        return JSONResponse({"id": secret_id}, status_code=201)
 
     @app.post("/api/secrets/{secret_id}/reveal")
-    async def reveal(secret_id: str) -> Response:
+    async def reveal(secret_id: str, body: RevealRequest | None = None) -> Response:
         if not _ID.fullmatch(secret_id):
             return _not_found()
-        result = await storage.open(secret_id)
-        # ponytail: no password in this lot, so PasswordRequired/WrongPassword cannot happen
-        # (nothing creates a verifier). Lot 3 gives them their own answers.
-        if not isinstance(result, Revealed):
-            return _not_found()
-        iv, ciphertext = result.payload[:IV_BYTES], result.payload[IV_BYTES:]
-        return JSONResponse(
-            {"iv": b64url_encode(iv), "ciphertext": b64url_encode(ciphertext)},
-            headers={"Cache-Control": "no-store"},
-        )
+        result = await storage.open(secret_id, body.verifier if body else None, bind=keyring.bind)
+        match result:
+            case Revealed(payload):
+                iv, ciphertext = payload[:IV_BYTES], payload[IV_BYTES:]
+                return JSONResponse(
+                    {"iv": b64url_encode(iv), "ciphertext": b64url_encode(ciphertext)}
+                )
+            case PasswordRequired():
+                stored = await storage.peek_verifier(secret_id)
+                if not stored:  # gone between the two calls
+                    return _not_found()
+                return JSONResponse(
+                    {"error": "password_required", "iterations": iterations_of(stored)},
+                    status_code=403,
+                )
+            case WrongPassword(attempts_left):
+                return JSONResponse(
+                    {"error": "wrong_password", "attempts_left": attempts_left}, status_code=403
+                )
+            case NotFound():
+                return _not_found()
 
     # Registered last: anything else under /api/secrets/ (wrong path or method) is the same 404.
     @app.api_route(
@@ -196,5 +254,15 @@ def create_app(redis: Redis) -> FastAPI:
 
 
 def app_from_env() -> FastAPI:
-    """Entry point for `uvicorn --factory one_time_vault.app:app_from_env`."""
-    return create_app(Redis.from_url(os.environ.get("OTV_REDIS_URL", "redis://localhost:6379")))
+    """Entry point for `uvicorn --factory --no-proxy-headers one_time_vault.app:app_from_env`.
+
+    The server keys are required: without `OTV_SERVER_KEYS` this raises and the app does not boot.
+    """
+    env = os.environ
+    return create_app(
+        Redis.from_url(env.get("OTV_REDIS_URL", "redis://localhost:6379")),
+        Keyring.parse(env.get("OTV_SERVER_KEYS")),
+        create_limit=int(env.get("OTV_CREATE_LIMIT", "20")),
+        create_window_seconds=int(env.get("OTV_CREATE_WINDOW_SECONDS", "3600")),
+        trusted_hops=int(env.get("OTV_TRUSTED_HOPS", "0")),
+    )

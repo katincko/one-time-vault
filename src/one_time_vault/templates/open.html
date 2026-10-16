@@ -16,6 +16,6 @@
     <button type="button" id="reveal" hidden>Reveal secret</button>
     <pre id="secret" hidden></pre>
   </main>
-  <script type="module" src="/static/open.js"></script>
+  <script type="module" nonce="{{ request.state.csp_nonce }}" src="/static/open.js"></script>
 </body>
 </html>

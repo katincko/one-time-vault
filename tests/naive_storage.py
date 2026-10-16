@@ -3,6 +3,8 @@
 Only the race harnesses use it, to prove they would catch the bug.
 """
 
+from collections.abc import Callable
+
 from redis.asyncio import Redis
 
 from one_time_vault import (
@@ -21,7 +23,13 @@ class NaiveStorage(SecretStorage):
         super().__init__(redis)
         self._r = redis
 
-    async def open(self, secret_id: str, verifier: bytes | None = None) -> OpenResult:
+    async def open(
+        self,
+        secret_id: str,
+        verifier: bytes | None = None,
+        *,
+        bind: Callable[[bytes, bytes], bytes] | None = None,
+    ) -> OpenResult:
         key = self._key(secret_id)
         payload, stored, attempts = await self._r.hmget(key, ["payload", "verifier", "attempts"])
         if payload is None:

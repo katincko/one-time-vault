@@ -31,6 +31,6 @@
       <p>Anyone with this link can read the secret once. The part after # never leaves your browser.</p>
     </section>
   </main>
-  <script type="module" src="/static/create.js"></script>
+  <script type="module" nonce="{{ request.state.csp_nonce }}" src="/static/create.js"></script>
 </body>
 </html>

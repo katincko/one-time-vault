@@ -132,3 +132,33 @@ round-trip, so only looking at what was made can catch them.
 | `/api/secrets/` catch-all answers a different 404 body | `Left contains 10 more items` (every probe differs from the reveal 404) | `test_api.py::test_malformed_routes_under_api_secrets_get_the_same_404` |
 
 (Before the catch-all, the same test was red with the framework's own `{"detail":"Not Found"}` on all 10 probes.)
+
+## Lot 3, part B: security headers (spec test 11) and creation limit (spec test 10)
+
+Run on Redis 7.4. Each plant was removed right after its run and the file restored.
+
+### Headers (`tests/test_headers.py`)
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| `connect-src 'self'` becomes `'none'` | `Left contains 12 more items` (every response has a different CSP) | `test_every_response_has_the_security_headers` |
+| Nonce is the constant `"A" * 22` | `AssertionError: a nonce was reused`, `assert 1 == 9` | `test_the_nonce_is_new_on_every_response_and_matches_the_script_tag` |
+| Headers added only when the status is below 400 | `create 413`, `create 422`, `create 429` have no `cache`, `hsts`, `nosniff`, `referrer` | `test_every_response_has_the_security_headers` |
+| `Referrer-Policy: same-origin` | `{'create 201': {'referrer': 'same-origin'}, ...}` | same |
+| HSTS header removed | `{'create 201': {'hsts': ''}, ...}` | same |
+| Open page script tag with `nonce="fixed"` instead of the response nonce | `assert '<script type="module" nonce="3UHF...' in '<!doctype html>...nonce="fixed"...'` | `test_the_nonce_is_new_on_every_response_and_matches_the_script_tag` |
+
+The byte-for-byte 404 tests now blank the nonce before comparing: it is random on purpose.
+
+### Creation limit (`tests/test_limits.py`)
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| Client IP is the leftmost `X-Forwarded-For` entry | `[201, 201, 201, 201, 201] == [201, 201, 201, 429, 429]` (forging the header dodges the limit) | `test_a_forged_forwarded_header_does_not_pick_the_bucket` |
+| Count with `GET` then `SET` from Python | `assert [201, 201, 20...201, 201, ...] == [...]`, `At index 10 diff: 201 != 429` (60 simultaneous creations, more than 10 pass) | `test_the_count_is_one_atomic_step_under_concurrency` |
+| `PEXPIRE` removed from the Lua script | `assert 0 < -1` on the counter's `PTTL` (no window) | same |
+| Trusted hops ignored (bucket is always the peer) | `assert [429] == [201]` (a different real client is limited too) | `test_a_forged_forwarded_header_does_not_pick_the_bucket` |
+| A non-address entry becomes the bucket key | `AssertionError: assert 'not-an-ip' == '10.0.0.9'` | `test_client_ip_buckets` |
+| IPv6 not grouped by /64 | `assert [201, 201, 201, 201] == [201, 201, 201, 429]` | `test_a_whole_ipv6_64_shares_one_bucket` |
+| Limiter placed inside the body limit (refused bodies are not counted) | `assert 201 == 429` | `test_a_refused_body_still_counts_toward_the_limit` |
+| `Retry-After` header dropped | `KeyError: 'retry-after'` | `test_the_creation_after_the_limit_is_429_with_retry_after` |
