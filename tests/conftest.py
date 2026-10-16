@@ -111,8 +111,10 @@ def sync_redis(server_url: str) -> Iterator[SyncRedis]:
     client.close()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def browser() -> Iterator[Browser]:
+    # Module scope on purpose: while sync Playwright is started, the thread looks like it has a
+    # running event loop and every asyncio test (pytest-asyncio) errors out.
     with sync_playwright() as p:
         b = p.chromium.launch()
         yield b

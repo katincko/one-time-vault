@@ -20,9 +20,10 @@ is lot 3.
 - Storage: Redis or Valkey, one hash per secret, key TTL is the expiry. The verifier comparison for
   the future password uses `hmac.compare_digest` in Python, never in Lua.
 
-Not in this lot: the access password, per-IP creation limit, security headers and CSP, Docker
-Compose, CI. Spec tests 3 (storage level), 7, 10 and 11 are covered by the storage suite or by
-later lots; see `docs/negative-proofs.md` for what is proven.
+Not in this lot: the access password (spec test 7), the per-IP creation limit (test 10), security
+headers and CSP (test 11), Docker Compose and CI. The server checks the ciphertext by padded
+blocks, so it accepts texts up to 10495 bytes; the 10 KB limit is enforced in the browser.
+`docs/negative-proofs.md` lists what is proven and how.
 
 ## Develop
 
