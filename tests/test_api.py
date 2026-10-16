@@ -117,6 +117,33 @@ async def test_404_is_byte_identical_for_missing_read_expired_and_malformed(
     assert (await client.post(f"/api/secrets/{live_id}/reveal")).status_code == 200
 
 
+async def test_malformed_routes_under_api_secrets_get_the_same_404(
+    client: httpx.AsyncClient, redis: Redis
+) -> None:
+    live, _ = await create(client)
+    baseline = await _shape(await client.post(f"/api/secrets/{new_secret_id()}/reveal"))
+    assert baseline[0] == 404
+    probes = [
+        ("GET", "/api/secrets/"),
+        ("POST", "/api/secrets/"),
+        ("GET", f"/api/secrets/{live}"),
+        ("DELETE", f"/api/secrets/{live}"),
+        ("PUT", f"/api/secrets/{live}"),
+        ("GET", f"/api/secrets/{live}/reveal"),  # wrong method on a real reveal route
+        ("POST", f"/api/secrets/{live}/reveal/extra"),
+        ("POST", f"/api/secrets/{live}/other"),
+        ("GET", "/api/secrets/a/b/c/d"),
+        ("POST", "/api/secrets//reveal"),
+    ]
+    odd = {
+        f"{m} {p}": s
+        for m, p in probes
+        if (s := await _shape(await client.request(m, p))) != baseline
+    }
+    assert odd == {}
+    assert await redis.exists(f"ovv:s:{live}") == 1  # none of them consumed the secret
+
+
 # Test 9: validation
 
 

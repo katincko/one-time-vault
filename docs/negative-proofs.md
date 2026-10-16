@@ -129,3 +129,6 @@ Run on Redis 7.4 (`-k redis-7.4`), `src/` restored with `git checkout` after eac
 
 Before these tests, planting the zero IV and the fixed key left all 138 tests green: both still
 round-trip, so only looking at what was made can catch them.
+| `/api/secrets/` catch-all answers a different 404 body | `Left contains 10 more items` (every probe differs from the reveal 404) | `test_api.py::test_malformed_routes_under_api_secrets_get_the_same_404` |
+
+(Before the catch-all, the same test was red with the framework's own `{"detail":"Not Found"}` on all 10 probes.)

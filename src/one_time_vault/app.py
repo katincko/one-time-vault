@@ -184,6 +184,14 @@ def create_app(redis: Redis) -> FastAPI:
             headers={"Cache-Control": "no-store"},
         )
 
+    # Registered last: anything else under /api/secrets/ (wrong path or method) is the same 404.
+    @app.api_route(
+        "/api/secrets/{rest:path}",
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    )
+    async def unknown_secret_route(rest: str) -> Response:
+        return _not_found()
+
     return app
 
 
