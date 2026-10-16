@@ -17,7 +17,7 @@ function clearFragment() {
 }
 
 /** @param {import("./vault-crypto.js").Bytes} key */
-async function open(key) {
+async function revealSecret(key) {
   reveal.disabled = true;
   let res;
   try {
@@ -67,7 +67,7 @@ function render() {
   }
   status.textContent = "Ready. Opening the secret deletes it from the server.";
   reveal.hidden = false;
-  reveal.onclick = () => open(key);
+  reveal.onclick = () => revealSecret(key);
 }
 
 render();
