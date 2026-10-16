@@ -42,7 +42,7 @@ class Tab:
         """Fill the form like a person and return the one-time link it shows."""
         self.page.goto(self.base + "/")
         self.page.fill("#text", text)
-        self.page.check(f"input[name=expires_in][value={expires}]")
+        self.page.check(f'input[name="expires_in"][value="{expires}"]')
         self.page.click("#create")
         expect(self.page.locator("#result")).to_be_visible()
         return self.page.input_value("#link")
@@ -61,7 +61,7 @@ class Tab:
 def tab(browser: Browser, live_server: LiveServer, sync_redis: SyncRedis) -> Iterator[Tab]:
     context = browser.new_context()
     t = Tab(context.new_page(), live_server.url)
-    context.on("request", t.requests.append)
+    context.on("request", lambda r: t.requests.append(r))
     yield t
     context.close()
 
@@ -184,6 +184,22 @@ def test_a_link_without_the_whole_key_says_so_and_never_calls_the_server(
     expect(tab.page.locator("#secret")).to_have_text("hello")
 
 
+def test_completing_the_fragment_on_the_open_page_enables_reveal_without_a_reload(
+    tab: Tab,
+) -> None:
+    link = tab.create("hello")
+    base, key = link.split("#")
+    tab.open_link(base)
+    expect(tab.page.locator("#status")).to_contain_text("Incomplete link")
+    tab.page.evaluate("(key) => { location.hash = key; }", key)  # same document, no reload
+    expect(tab.page.locator("#reveal")).to_be_visible()
+    tab.reveal()
+    expect(tab.page.locator("#secret")).to_have_text("hello")
+    tab.page.evaluate("(key) => { location.hash = key; }", key)  # too late: the secret is gone
+    expect(tab.page.locator("#status")).to_contain_text("Secret opened")
+    expect(tab.page.locator("#secret")).to_have_text("hello")
+
+
 # Test 6: tampering
 
 
@@ -231,6 +247,7 @@ def test_the_fragment_is_removed_when_the_secret_is_already_gone(tab: Tab) -> No
     tab.open_link(link)
     tab.reveal()
     expect(tab.page.locator("#secret")).to_have_text("hello")
+    tab.page.goto("about:blank")  # a fresh visit, not a fragment change on the open page
     tab.open_link(link)  # second visit: 404
     tab.reveal()
     expect(tab.page.locator("#status")).to_contain_text("already read")

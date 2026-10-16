@@ -7,10 +7,12 @@ const reveal = byId("reveal", HTMLButtonElement);
 const secret = byId("secret", HTMLElement);
 
 const id = location.pathname.split("/").pop() ?? "";
-const key = parseKey(location.hash.slice(1));
+
+let finished = false; // the server answered: the secret is gone, whatever the page shows now
 
 /** The key must not stay in the address bar, history or a bookmark once the secret is gone. */
 function clearFragment() {
+  finished = true;
   history.replaceState(null, "", location.pathname);
 }
 
@@ -52,12 +54,22 @@ async function open(key) {
   }
 }
 
-if (!key) {
-  // No whole key: nothing to decrypt with, so do not call the server (that would burn the secret).
-  status.textContent =
-    "Incomplete link. Ask the sender for the full link, including the part after #.";
-} else {
+/** Shows what the current address allows: reveal with a whole key, else "incomplete link". */
+function render() {
+  if (finished) return;
+  const key = parseKey(location.hash.slice(1));
+  if (!key) {
+    // No whole key: nothing to decrypt with, so do not call the server (that would burn the secret).
+    reveal.hidden = true;
+    status.textContent =
+      "Incomplete link. Ask the sender for the full link, including the part after #.";
+    return;
+  }
   status.textContent = "Ready. Opening the secret deletes it from the server.";
   reveal.hidden = false;
-  reveal.addEventListener("click", () => open(key));
+  reveal.onclick = () => open(key);
 }
+
+render();
+// Pasting the missing part into the address bar changes only the fragment: no page reload.
+addEventListener("hashchange", render);
