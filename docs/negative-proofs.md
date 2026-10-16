@@ -116,3 +116,16 @@ Limits worth knowing:
   accepts texts up to 10495 bytes; the browser enforces 10 KB.
 - Spec tests 7 (password), 10 (creation limit) and 11 (headers) belong to lot 3 and are not
   covered here.
+
+## Lot 3, part A (review gaps of lot 2)
+
+Run on Redis 7.4 (`-k redis-7.4`), `src/` restored with `git checkout` after each row, green again.
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| IV always 12 zero bytes in `encrypt` | `AssertionError: an IV was used twice`, `assert 1 == 4` | `test_browser_crypto.py::test_every_secret_gets_a_fresh_iv_and_key_of_the_right_size` |
+| `newKey()` always the same 32 bytes | `AssertionError: a key was used twice`, `assert 1 == 4` | same |
+| AES key derived with `extractable: true` | `assert True is False` on `extractable` | `test_browser_crypto.py::test_the_derived_aes_key_is_not_extractable` |
+
+Before these tests, planting the zero IV and the fixed key left all 138 tests green: both still
+round-trip, so only looking at what was made can catch them.

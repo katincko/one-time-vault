@@ -5,94 +5,19 @@ Spec tests 1 (canaries), 4 (opening without clicking), 5 (incomplete link), 6 (t
 implementation).
 """
 
-import base64
 import os
 import secrets
-from collections.abc import Iterator
-from dataclasses import dataclass, field
 
 import pytest
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from playwright.sync_api import Browser, Page, Request, expect
+from playwright.sync_api import expect
 from redis import Redis as SyncRedis
 
+from browser_kit import Tab, b64url, redis_bytes, request_bytes, stored_keys, unb64url
 from canary import find_leaks
 from conftest import LiveServer
-
-KEY_RE = r"^[A-Za-z0-9_-]{43}$"
-
-
-def b64url(raw: bytes) -> str:
-    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
-
-
-def unb64url(text: str) -> bytes:
-    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
-
-
-@dataclass
-class Tab:
-    page: Page
-    base: str
-    requests: list[Request] = field(default_factory=list)
-
-    def create(self, text: str, expires: str = "1d") -> str:
-        """Fill the form like a person and return the one-time link it shows."""
-        self.page.goto(self.base + "/")
-        self.page.fill("#text", text)
-        self.page.check(f'input[name="expires_in"][value="{expires}"]')
-        self.page.click("#create")
-        expect(self.page.locator("#result")).to_be_visible()
-        return self.page.input_value("#link")
-
-    def open_link(self, link: str) -> None:
-        self.page.goto(link)
-
-    def reveal(self) -> None:
-        self.page.click("#reveal")
-
-    def api_calls(self) -> list[Request]:
-        return [r for r in self.requests if "/api/" in r.url]
-
-
-@pytest.fixture
-def tab(browser: Browser, live_server: LiveServer, sync_redis: SyncRedis) -> Iterator[Tab]:
-    context = browser.new_context()
-    t = Tab(context.new_page(), live_server.url)
-    context.on("request", lambda r: t.requests.append(r))
-    yield t
-    context.close()
-
-
-def stored_keys(r: SyncRedis) -> list[bytes]:
-    return sorted(r.scan_iter("*"))
-
-
-def as_bytes(value: bytes | str) -> bytes:
-    return value if isinstance(value, bytes) else value.encode()
-
-
-def redis_bytes(r: SyncRedis) -> bytes:
-    """Every key name and every stored value, as bytes."""
-    out: list[bytes] = []
-    for key in stored_keys(r):
-        out.append(key)
-        for field_name, value in r.hgetall(key).items():
-            out += [as_bytes(field_name), as_bytes(value)]
-    return b"\n".join(out)
-
-
-def request_bytes(requests: list[Request]) -> bytes:
-    """Everything the browser sent: request line, every header, body."""
-    out = []
-    for r in requests:
-        out.append(f"{r.method} {r.url}".encode())
-        out += [f"{k}: {v}".encode() for k, v in r.all_headers().items()]
-        out.append(r.post_data_buffer or b"")
-    return b"\n".join(out)
-
 
 # Test 1: neither the text nor the key ever reaches the server
 

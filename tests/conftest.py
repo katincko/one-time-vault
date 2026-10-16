@@ -1,10 +1,12 @@
 import asyncio
+import base64
 import os
 import socket
 import subprocess
 import sys
 import time
 from collections.abc import AsyncIterator, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,6 +18,8 @@ from redis import Redis as SyncRedis
 from redis.asyncio import Redis
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.wait_strategies import LogMessageWaitStrategy
+
+from browser_kit import Tab
 
 # Pinned tags: the suite runs against the real servers, never a fake.
 IMAGES = ["redis:7.4", "valkey/valkey:8.0"]
@@ -62,11 +66,30 @@ def _free_port() -> int:
         return int(s.getsockname()[1])
 
 
-@pytest.fixture(scope="session")
-def live_server(server_url: str, tmp_path_factory: pytest.TempPathFactory) -> Iterator[LiveServer]:
+def _b64(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+
+# Server keys for the tests: version 1 is the old one, version 2 the current one.
+KEY_V1 = bytes(range(32))
+KEY_V2 = bytes(range(32, 64))
+SERVER_KEYS = f"2:{_b64(KEY_V2)},1:{_b64(KEY_V1)}"
+
+
+@contextmanager
+def run_server(
+    redis_url: str, log_path: Path, extra_env: dict[str, str] | None = None
+) -> Iterator[LiveServer]:
+    """The real app under uvicorn in its own process. Our own client-IP logic is the only one."""
     port = _free_port()
-    log_path = tmp_path_factory.mktemp("server") / "server.log"
-    env = {**os.environ, "OTV_REDIS_URL": server_url, "PYTHONUNBUFFERED": "1"}
+    env = {
+        **os.environ,
+        "OTV_REDIS_URL": redis_url,
+        "OTV_SERVER_KEYS": SERVER_KEYS,
+        "OTV_CREATE_LIMIT": "100000",  # the browser tests create hundreds of secrets
+        "PYTHONUNBUFFERED": "1",
+        **(extra_env or {}),
+    }
     with log_path.open("wb") as log:
         proc = subprocess.Popen(
             [
@@ -81,6 +104,7 @@ def live_server(server_url: str, tmp_path_factory: pytest.TempPathFactory) -> It
                 str(port),
                 "--log-level",
                 "debug",
+                "--no-proxy-headers",
             ],
             env=env,
             stdout=log,
@@ -96,10 +120,16 @@ def live_server(server_url: str, tmp_path_factory: pytest.TempPathFactory) -> It
                 except httpx.HTTPError:
                     assert proc.poll() is None and time.time() < deadline, "server did not start"
                     time.sleep(0.2)
-            yield LiveServer(url=url, redis_url=server_url, log_path=log_path)
+            yield LiveServer(url=url, redis_url=redis_url, log_path=log_path)
         finally:
             proc.terminate()
             proc.wait(timeout=10)
+
+
+@pytest.fixture(scope="session")
+def live_server(server_url: str, tmp_path_factory: pytest.TempPathFactory) -> Iterator[LiveServer]:
+    with run_server(server_url, tmp_path_factory.mktemp("server") / "server.log") as server:
+        yield server
 
 
 @pytest.fixture
@@ -119,3 +149,12 @@ def browser() -> Iterator[Browser]:
         b = p.chromium.launch()
         yield b
         b.close()
+
+
+@pytest.fixture
+def tab(browser: Browser, live_server: LiveServer, sync_redis: SyncRedis) -> Iterator[Tab]:
+    context = browser.new_context()
+    t = Tab(context.new_page(), live_server.url)
+    context.on("request", lambda r: t.requests.append(r))
+    yield t
+    context.close()
