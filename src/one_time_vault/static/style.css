@@ -1,0 +1,11 @@
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { margin: 0; }
+main { max-width: 40rem; margin: 0 auto; padding: 1rem 16px 3rem; }
+textarea, #link { width: 100%; box-sizing: border-box; font: inherit; }
+textarea { font-family: ui-monospace, monospace; }
+fieldset { margin: 1rem 0; }
+label { display: block; margin: 0.25rem 0; }
+button { font: inherit; padding: 0.5rem 1rem; }
+pre { white-space: pre-wrap; word-break: break-word; padding: 1rem; border: 1px solid; }
+.error { color: #b00020; }
+@media (prefers-color-scheme: dark) { .error { color: #ff8a80; } }

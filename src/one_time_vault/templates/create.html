@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>One-time vault</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main>
+    <h1>One-time vault</h1>
+    <p>Write a secret. It is encrypted in your browser, and the link can be opened once.</p>
+    <noscript><p class="error">This page needs JavaScript to encrypt in your browser.</p></noscript>
+    <form id="create-form">
+      <label for="text">Secret (up to 10 KB)</label>
+      <textarea id="text" rows="8" autocomplete="off" spellcheck="false" required></textarea>
+      <fieldset>
+        <legend>Expires after</legend>
+        <label><input type="radio" name="expires_in" value="1h"> 1 hour</label>
+        <label><input type="radio" name="expires_in" value="1d" checked> 1 day</label>
+        <label><input type="radio" name="expires_in" value="7d"> 7 days</label>
+      </fieldset>
+      <button type="submit" id="create">Create link</button>
+    </form>
+    <p id="error" class="error" role="alert" hidden></p>
+    <section id="result" hidden>
+      <label for="link">Your one-time link</label>
+      <input id="link" readonly>
+      <button type="button" id="copy">Copy</button>
+      <p>Anyone with this link can read the secret once. The part after # never leaves your browser.</p>
+    </section>
+  </main>
+  <script type="module" src="/static/create.js"></script>
+</body>
+</html>

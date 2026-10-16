@@ -1,0 +1,11 @@
+{
+  "name": "one-time-vault-types",
+  "private": true,
+  "description": "Type check only for the browser JS (JSDoc + tsc). No build step.",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
+  }
+}

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex">
+  <title>One-time vault</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main>
+    <h1>One-time vault</h1>
+    <noscript><p class="error">This page needs JavaScript to decrypt in your browser.</p></noscript>
+    <p id="status" role="status">Loading.</p>
+    <button type="button" id="reveal" hidden>Reveal secret</button>
+    <pre id="secret" hidden></pre>
+  </main>
+  <script type="module" src="/static/open.js"></script>
+</body>
+</html>
