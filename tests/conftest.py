@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator, Iterator
 
 import pytest
@@ -25,7 +26,9 @@ def server_url(request: pytest.FixtureRequest) -> Iterator[str]:
 
 @pytest_asyncio.fixture
 async def redis(server_url: str) -> AsyncIterator[Redis]:
-    client: Redis = Redis.from_url(server_url, max_connections=200)
+    client: Redis = Redis.from_url(server_url, max_connections=200, socket_connect_timeout=30)
+    # Warm the pool: opening 50 sockets at once through Docker Desktop is slow and flaky.
+    await asyncio.gather(*(client.ping() for _ in range(60)))
     await client.flushall()
     yield client
     await client.aclose()
