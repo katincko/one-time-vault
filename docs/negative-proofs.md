@@ -162,3 +162,30 @@ The byte-for-byte 404 tests now blank the nonce before comparing: it is random o
 | IPv6 not grouped by /64 | `assert [201, 201, 201, 201] == [201, 201, 201, 429]` | `test_a_whole_ipv6_64_shares_one_bucket` |
 | Limiter placed inside the body limit (refused bodies are not counted) | `assert 201 == 429` | `test_a_refused_body_still_counts_toward_the_limit` |
 | `Retry-After` header dropped | `KeyError: 'retry-after'` | `test_the_creation_after_the_limit_is_429_with_retry_after` |
+
+## Lot 3, part B: access password (spec test 7), API and server keys
+
+Run on Redis 7.4. Each plant restored right after its run.
+
+### Server (`tests/test_password.py`, `tests/test_keyring.py`)
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| `seal` stores the raw verifier after the header instead of its HMAC | `assert b"\x02\x00\t'...\x1d\x1e\x1f" == b"\x02\x00\t'...xdfj\xf0c\xaf"` | `test_password.py::test_the_server_stores_a_keyed_hash_never_the_verifier` (and `test_keyring.py::test_seal_is_header_plus_hmac...`) |
+| `==` instead of `hmac.compare_digest` on the keyed path | `assert [] == [(b"\x02\x00...", b"\x02\x00...")]` (the spy was never called) | `test_the_candidate_is_compared_in_constant_time_in_python` |
+| `bind` uses the current key instead of the key version stored with the secret | `assert 403 == 200` for a v1 secret opened after rotation | `test_a_key_rotation_keeps_old_secrets_openable` |
+| An unknown key version falls back to the current key | `assert 403 == 500` (a dropped key is treated as a wrong password) | `test_a_dropped_key_is_a_server_error_that_does_not_burn_attempts` |
+| Wrong-password counter as read then write from Python | `[403, 403, 40...] == [403, ..., 404, ...]`, `At index 5 diff: 403 != 404` (40 simultaneous wrong tries, more than 5 counted) | `test_simultaneous_wrong_passwords_are_counted_exactly_to_the_limit` |
+| Iterations floor lowered to 1 | `('iterations one below the floor', ...)`, `assert 201 == 422` | `test_every_password_refusal_is_an_error_and_stores_nothing` |
+| Iterations ceiling removed | `('iterations one above the ceiling', ...)`, `assert 201 == 422` | same |
+| Verifier and iterations no longer required together | `('verifier without iterations', ...)`, `assert 201 == 422` | same |
+| Wrong password answers nothing (no own response) | `[200, 200, 200, 200, 200] == [403, 403, 403, 403, 403]` | `test_five_wrong_passwords_destroy_the_secret` |
+| "Password required" answered as the 404 | `assert (404, {'detail': 'not found'}) == (403, {'error': 'password_required', ...})` | `test_a_protected_secret_asks_for_the_password_and_keeps_every_attempt` |
+| Unknown fields accepted in the reveal body | `assert 200 == 422` | `test_a_malformed_verifier_is_refused_and_not_counted` |
+| Verifier length not checked | `assert 403 == 422` on a 31 byte verifier | same |
+| Missing server keys accepted at boot (`Keyring.parse` guard removed) | `AttributeError: 'NoneType' object has no attribute 'split'` instead of `KeyringError` | `test_keyring.py::test_bad_server_keys_refuse_to_boot` |
+
+What the password does not hide: whoever holds a secret id (128 random bits) can learn that the
+secret exists and is protected (the 403 answers), and can spend its five attempts. Someone with
+no id learns nothing; ids that are missing, read, expired or malformed all get the same 404,
+with or without a verifier (`test_a_gone_secret_gets_the_one_404_with_or_without_a_verifier`).
