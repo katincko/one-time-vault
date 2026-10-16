@@ -40,13 +40,13 @@ MAX_TEXT_BYTES = 10 * 1024
 MAX_CIPHERTEXT_BYTES = (MAX_TEXT_BYTES // BLOCK_BYTES + 1) * BLOCK_BYTES + TAG_BYTES
 MAX_BODY_BYTES = 16 * 1024  # base64url of the largest ciphertext is ~14 KB
 
-_B64URL = re.compile(r"^[A-Za-z0-9_-]*$")
-_ID = re.compile(rf"^[A-Za-z0-9_-]{{{ID_LENGTH}}}$")
+_B64URL = re.compile(r"[A-Za-z0-9_-]*")
+_ID = re.compile(rf"[A-Za-z0-9_-]{{{ID_LENGTH}}}")
 
 
 def b64url_decode(value: object) -> bytes:
     """Strict base64url without padding. Rejects anything that does not round-trip."""
-    if not isinstance(value, str) or not _B64URL.match(value):
+    if not isinstance(value, str) or not _B64URL.fullmatch(value):
         raise ValueError("must be base64url without padding")
     try:
         raw = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
@@ -173,7 +173,7 @@ def create_app(redis: Redis) -> FastAPI:
 
     @app.post("/api/secrets/{secret_id}/reveal")
     async def reveal(secret_id: str) -> Response:
-        if not _ID.match(secret_id):
+        if not _ID.fullmatch(secret_id):
             return _not_found()
         result = await storage.open(secret_id)
         # ponytail: no password in this lot, so PasswordRequired/WrongPassword cannot happen
