@@ -1,14 +1,15 @@
 """Spec test 10: the per-IP creation limit (429) and the size limit (413)."""
 
 import asyncio
-from collections.abc import AsyncIterator, Callable
+import secrets
+from collections.abc import AsyncIterator, Callable, Iterator
 
 import httpx
 import pytest
 import pytest_asyncio
 from redis.asyncio import Redis
 
-from conftest import SERVER_KEYS
+from conftest import SERVER_KEYS, LiveServer, run_server
 from one_time_vault.app import create_app
 from one_time_vault.keyring import Keyring
 from one_time_vault.ratelimit import client_ip
@@ -161,3 +162,41 @@ async def test_a_whole_ipv6_64_shares_one_bucket(make_client: MakeClient) -> Non
         c = make_client(peer=f"2001:db8:1:2:{i}::{i}")  # a different address each time
         results += await statuses(c, 1)
     assert results == [201] * LIMIT + [429]
+
+
+@pytest.fixture(scope="module")
+def limited_server(
+    server_url: str, tmp_path_factory: pytest.TempPathFactory
+) -> Iterator[LiveServer]:
+    """The real process behind one trusted proxy, with a creation limit of 3."""
+    env = {"OTV_CREATE_LIMIT": "3", "OTV_TRUSTED_HOPS": "1"}
+    with run_server(server_url, tmp_path_factory.mktemp("limited") / "server.log", env) as server:
+        yield server
+
+
+def test_the_real_server_ignores_a_forged_header_and_answers_429_and_413(
+    limited_server: LiveServer,
+) -> None:
+    real = f"203.0.113.{secrets.randbelow(200) + 20}"  # the proxy appends the address it saw
+    sent = body()
+    codes = [
+        httpx.post(
+            limited_server.url + "/api/secrets",
+            json=sent,
+            headers={"X-Forwarded-For": f"198.51.100.{i}, {real}"},
+        ).status_code
+        for i in range(5)
+    ]
+    assert codes == [201, 201, 201, 429, 429]
+    other = httpx.post(
+        limited_server.url + "/api/secrets",
+        json=sent,
+        headers={"X-Forwarded-For": f"198.51.100.1, 203.0.113.{secrets.randbelow(20)}"},
+    )
+    assert other.status_code == 201  # another real client is not limited
+    big = httpx.post(
+        limited_server.url + "/api/secrets",
+        content=b"x" * 200_000,
+        headers={"X-Forwarded-For": "198.51.100.1, 203.0.113.250"},
+    )
+    assert big.status_code == 413

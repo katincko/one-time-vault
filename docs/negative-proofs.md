@@ -209,3 +209,12 @@ Real Chromium, Redis 7.4.
 One plant was refused by the browser itself: PBKDF2 base key with `extractable: true` makes Chromium
 throw, so the page cannot even create (red on `#result`, not on the recorder). That is why the
 recorder row above uses the AES key instead.
+
+### Creation limit against the real server process (`tests/test_limits.py`)
+
+Real uvicorn (`--no-proxy-headers`), one trusted hop, limit 3.
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| Client IP is the leftmost `X-Forwarded-For` entry | `assert [201, 201, 201, 201, 201] == [201, 201, 201, 429, 429]` | `test_the_real_server_ignores_a_forged_header_and_answers_429_and_413` |
+| Body limit middleware removed | `assert 422 == 413` | same |
