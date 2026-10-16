@@ -62,14 +62,15 @@ async def _round(
     redis: Redis, store: SecretStorage, *, protected: bool, right_share: float
 ) -> Stats:
     await redis.flushall()
-    await store.create("s", b"cipher", 60, verifier=V if protected else None)
+    sid = await store.create(b"cipher", 60, verifier=V if protected else None)
     candidates: list[bytes | None] = [
         (V if random.random() < right_share else b"wrong") if protected else None
         for _ in range(READERS)
     ]
-    results = await asyncio.gather(*(store.open("s", c) for c in candidates))
-    key_left = await redis.exists("ovv:s:s") == 1
-    in_key = int(await redis.hget("ovv:s:s", "attempts") or 0) if key_left else 0
+    results = await asyncio.gather(*(store.open(sid, c) for c in candidates))
+    key = f"ovv:s:{sid}"
+    key_left = await redis.exists(key) == 1
+    in_key = int(await redis.hget(key, "attempts") or 0) if key_left else 0
     return Stats(
         delivered=sum(isinstance(r, Revealed) for r in results),
         wrong_replies=sum(isinstance(r, WrongPassword) for r in results),

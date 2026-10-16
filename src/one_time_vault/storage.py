@@ -3,7 +3,9 @@
 Missing, already read and expired secrets are the same thing here: `NotFound`.
 """
 
+import base64
 import hmac
+import secrets
 from dataclasses import dataclass
 from typing import Any
 
@@ -13,6 +15,14 @@ from one_time_vault import scripts
 
 MAX_ATTEMPTS = 5
 KEY_PREFIX = "ovv:s:"
+ID_BYTES = 16  # 128 bits
+ID_LENGTH = 22  # base64url of 16 bytes, no padding
+_ID_RETRIES = 5
+
+
+def new_secret_id() -> str:
+    """128 random bits, base64url. Ids are always made here, never taken from a caller."""
+    return base64.urlsafe_b64encode(secrets.token_bytes(ID_BYTES)).rstrip(b"=").decode("ascii")
 
 
 @dataclass(frozen=True)
@@ -52,20 +62,23 @@ class SecretStorage:
 
     async def create(
         self,
-        secret_id: str,
         payload: bytes,
         ttl_seconds: int,
         verifier: bytes | None = None,
-    ) -> bool:
-        """Store a secret for `ttl_seconds`. False if the id is taken (nothing overwritten)."""
+    ) -> str:
+        """Store a secret for `ttl_seconds` under a fresh server-made id and return the id."""
         if ttl_seconds < 1:
             raise ValueError("ttl_seconds must be >= 1")
         if verifier is not None and not verifier:
             raise ValueError("verifier must be non-empty or None")
-        created: Any = await self._create(
-            keys=[self._key(secret_id)], args=[payload, verifier or b"", ttl_seconds]
-        )
-        return bool(created == 1)
+        for _ in range(_ID_RETRIES):
+            secret_id = new_secret_id()
+            created: Any = await self._create(
+                keys=[self._key(secret_id)], args=[payload, verifier or b"", ttl_seconds]
+            )
+            if created == 1:
+                return secret_id
+        raise RuntimeError("could not allocate a free secret id")
 
     async def open(self, secret_id: str, verifier: bytes | None = None) -> OpenResult:
         """Deliver and delete a secret, or say why not.
