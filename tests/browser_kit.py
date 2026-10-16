@@ -21,11 +21,13 @@ class Tab:
     base: str
     requests: list[Request] = field(default_factory=list)
 
-    def create(self, text: str, expires: str = "1d") -> str:
+    def create(self, text: str, expires: str = "1d", password: str | None = None) -> str:
         """Fill the form like a person and return the one-time link it shows."""
         self.page.goto(self.base + "/")
         self.page.fill("#text", text)
         self.page.check(f'input[name="expires_in"][value="{expires}"]')
+        if password is not None:
+            self.page.fill("#password", password)
         self.page.click("#create")
         expect(self.page.locator("#result")).to_be_visible()
         return self.page.input_value("#link")
@@ -41,7 +43,7 @@ class Tab:
 
 
 def stored_keys(r: SyncRedis) -> list[bytes]:
-    return sorted(r.scan_iter("*"))
+    return sorted(r.scan_iter("ovv:s:*"))
 
 
 def as_bytes(value: bytes | str) -> bytes:

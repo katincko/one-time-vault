@@ -2,8 +2,8 @@
 // Everything the browser does with secrets. No network here.
 //
 // One random 256-bit key per secret, never sent anywhere. HKDF-SHA256 splits it into two
-// subkeys by label: "encryption" (AES-256-GCM) and "password" (reserved for the access
-// password of a later lot). The plaintext is padded to blocks of 256 bytes before encrypting,
+// subkeys by label: "encryption" (AES-256-GCM) and "password" (the salt of the access
+// password verifier). The plaintext is padded to blocks of 256 bytes before encrypting,
 // so the ciphertext length only tells the block count.
 
 /** @typedef {Uint8Array<ArrayBuffer>} Bytes */
@@ -12,6 +12,7 @@ export const KEY_BYTES = 32;
 export const IV_BYTES = 12;
 export const BLOCK_BYTES = 256;
 export const MAX_TEXT_BYTES = 10 * 1024;
+export const PBKDF2_ITERATIONS = 600_000; // OWASP floor; the server refuses fewer
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -140,4 +141,26 @@ export async function decrypt(key, iv, ciphertext) {
   const { encryption } = await deriveKeys(key);
   const padded = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, encryption, ciphertext);
   return decoder.decode(unpad(new Uint8Array(padded)));
+}
+
+/**
+ * What the browser sends instead of the access password: PBKDF2-SHA256 of the password, salted
+ * with the "password" subkey of this secret. The password itself never leaves the page. NFKC
+ * makes the same typed password the same bytes on every keyboard and operating system.
+ * @param {string} password
+ * @param {Bytes} key
+ * @param {number} iterations
+ * @returns {Promise<Bytes>}
+ */
+export async function passwordVerifier(password, key, iterations) {
+  const { password: salt } = await deriveKeys(key);
+  const base = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(password.normalize("NFKC")),
+    "PBKDF2",
+    false,
+    ["deriveBits"],
+  );
+  const params = { name: "PBKDF2", hash: "SHA-256", salt, iterations };
+  return new Uint8Array(await crypto.subtle.deriveBits(params, base, 256));
 }

@@ -14,6 +14,11 @@
     <noscript><p class="error">This page needs JavaScript to decrypt in your browser.</p></noscript>
     <p id="status" role="status">Loading.</p>
     <button type="button" id="reveal" hidden>Reveal secret</button>
+    <form id="password-form" hidden>
+      <label for="access-password">Password</label>
+      <input id="access-password" type="password" autocomplete="off" required>
+      <button type="submit" id="open-secret">Open</button>
+    </form>
     <pre id="secret" hidden></pre>
   </main>
   <script type="module" nonce="{{ request.state.csp_nonce }}" src="/static/open.js"></script>

@@ -114,8 +114,8 @@ Limits worth knowing:
   proof is the page-level plant above (a failure shown as success), not a weakened cipher.
 - The server cannot enforce the exact 10240-byte text limit, only the padded block count, so it
   accepts texts up to 10495 bytes; the browser enforces 10 KB.
-- Spec tests 7 (password), 10 (creation limit) and 11 (headers) belong to lot 3 and are not
-  covered here.
+- Spec tests 7 (password), 10 (creation limit) and 11 (headers) are covered in the Lot 3
+  sections below.
 
 ## Lot 3, part A (review gaps of lot 2)
 
@@ -189,3 +189,23 @@ What the password does not hide: whoever holds a secret id (128 random bits) can
 secret exists and is protected (the 403 answers), and can spend its five attempts. Someone with
 no id learns nothing; ids that are missing, read, expired or malformed all get the same 404,
 with or without a verifier (`test_a_gone_secret_gets_the_one_404_with_or_without_a_verifier`).
+
+### Password in the browser (`tests/test_browser_password.py`)
+
+Real Chromium, Redis 7.4.
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| The create call sends the password in an extra header | `AssertionError: password canary in requests`, encodings `raw`, `percent`, `percent-plus` | `test_the_password_never_reaches_the_server` |
+| Verifier salt is 32 zero bytes instead of the `password` subkey | `assert b'\x96O\x8c...' == b'9\xd9\xff+Q...'` against Python's own `hashlib.pbkdf2_hmac` | `test_the_verifier_is_pbkdf2_of_the_password_salted_with_the_password_subkey` |
+| 1,000 iterations while the page declares 600,000 | `assert b'\x8bl\t...' == b'9\xd9\xff+Q...'` | same |
+| `normalize("NFKC")` removed | `assert [False, False] == [True, False]` (composed and decomposed forms differ) | `test_the_same_password_typed_in_two_unicode_forms_gives_the_same_verifier` |
+| AES key derived with `extractable: true` (whole-flow recorder) | `Left contains 4 more items`, first `{"name":"deriveKey","algo":"AES-GCM","extractable":true}` | `test_no_key_the_pages_make_is_extractable_in_the_whole_flow` |
+| Inline `<script>` without nonce added to the open page | `Executing inline script violates the following Content Security Policy directive 'script-src 'nonce-...'` | `test_the_pages_run_under_the_csp_without_a_violation` |
+| Wrong-password message without the countdown | `Locator expected to contain text 'Wrong password. 4 attempts left'`, actual `Wrong password. ` | `test_a_wrong_password_counts_down_and_the_right_one_still_works` |
+| Fragment not cleared when the fifth wrong password destroys the secret | `assert '#' not in 'http://127...#6bJv...'` | `test_five_wrong_passwords_destroy_the_secret_and_the_page_says_so` |
+| The page ignores the 403 "password required" answer | `Locator expected to be visible` on `#password-form`, actual `hidden` | `test_a_protected_secret_asks_for_the_password_and_opens_with_it` |
+
+One plant was refused by the browser itself: PBKDF2 base key with `extractable: true` makes Chromium
+throw, so the page cannot even create (red on `#result`, not on the recorder). That is why the
+recorder row above uses the AES key instead.
