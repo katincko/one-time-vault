@@ -37,7 +37,8 @@ creation limit, security headers). Docker Compose, CI and the demo are still to 
   hour), counted in one Lua step. `OTV_TRUSTED_HOPS=N` is the number of proxies in front; the
   client is the Nth `X-Forwarded-For` entry from the right, so a forged header cannot pick the
   bucket. With 0 (default) the header is ignored. The app must only be reachable through those
-  proxies. IPv6 is counted per /64. Over the limit: 429 with `Retry-After`; a body over 16 KB: 413.
+  proxies. IPv6 is counted per /64, except an IPv4 mapped into IPv6 (`::ffff:a.b.c.d`), which counts as
+  that IPv4 address, in the socket peer and in `X-Forwarded-For`. Over the limit: 429 with `Retry-After`; a body over 16 KB: 413.
 - Headers on every response, pages and API: the spec CSP with a new nonce per response,
   `nosniff`, HSTS, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`.
 

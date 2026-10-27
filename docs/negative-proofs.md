@@ -235,3 +235,12 @@ Real uvicorn (`--no-proxy-headers`), one trusted hop, limit 3.
 | No catch in `SecurityHeadersMiddleware` (Starlette's own 500 handler answers, outside our middleware); route raises | `assert '' == "default-src ...ct-src 'none'"` (no CSP on the 500) | `test_a_500_from_a_route_has_the_headers_a_generic_body_and_a_log_line` |
 | Same, the limit middleware (inside) raises | `assert '' == "default-src ...ct-src 'none'"` | `test_a_500_from_an_inner_middleware_has_the_headers_a_generic_body_and_a_log_line` |
 | Same, three 500s in a row | `KeyError: 'content-security-policy'` | `test_each_500_gets_its_own_nonce` |
+
+### IPv4 mapped into IPv6 (`tests/test_limits.py`)
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| Mapped address cut to /64 like any IPv6 (the code before the fix) | `assert [429] == [201]`: a second mapped IPv4 lands in the first one's `::/64` bucket | `test_two_mapped_ipv4_addresses_have_their_own_buckets` |
+| same | `assert [201] == [429]`: the mapped and the plain IPv4 do not share a bucket | `test_a_mapped_ipv4_and_the_plain_one_share_a_bucket` |
+| same, address from `X-Forwarded-For` | `assert [429] == [201]` | `test_a_mapped_ipv4_in_the_forwarded_header_has_its_own_bucket` |
+| same, pure function | 6 of 7 rows red, e.g. `AssertionError: assert '::/64' == '198.51.100.7'`; the real IPv6 row stays green | `test_an_ipv4_mapped_in_ipv6_is_the_plain_ipv4` |

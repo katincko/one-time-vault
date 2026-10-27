@@ -24,7 +24,8 @@ CREATE_PATH = "/api/secrets"
 def client_ip(scope: Scope, trusted_hops: int) -> str:
     """The bucket for this request: the trusted hop's address, else the socket peer.
 
-    IPv6 clients are bucketed by /64, since one household or host owns a whole /64.
+    IPv6 clients are bucketed by /64, since one household or host owns a whole /64. An IPv4
+    address mapped into IPv6 (`::ffff:a.b.c.d`) is the plain IPv4 one.
     """
     client = scope.get("client")
     peer = client[0] if client else "unknown"
@@ -42,6 +43,8 @@ def client_ip(scope: Scope, trusted_hops: int) -> str:
         ip = ipaddress.ip_address(address)
     except ValueError:
         return peer  # not an address: never let free text become a key
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        return str(ip.ipv4_mapped)  # ::ffff:a.b.c.d is the IPv4 client a.b.c.d, not a /64
     if isinstance(ip, ipaddress.IPv6Address):
         return str(ipaddress.ip_network(f"{ip}/64", strict=False).network_address) + "/64"
     return str(ip)

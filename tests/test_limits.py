@@ -156,6 +156,48 @@ def test_client_ip_buckets(peer: str, header: str | None, hops: int, bucket: str
     assert client_ip(scope, hops) == bucket
 
 
+@pytest.mark.parametrize(
+    ("peer", "header", "hops", "bucket"),
+    [
+        ("::ffff:198.51.100.7", None, 0, "198.51.100.7"),
+        ("::ffff:198.51.100.8", None, 0, "198.51.100.8"),
+        ("10.0.0.9", "7.7.7.7, ::ffff:203.0.113.5", 1, "203.0.113.5"),
+        ("10.0.0.9", "7.7.7.7, ::FFFF:203.0.113.6", 1, "203.0.113.6"),
+        ("::ffff:10.0.0.9", "7.7.7.7, ::ffff:203.0.113.5", 1, "203.0.113.5"),
+        ("::ffff:c633:6407", None, 0, "198.51.100.7"),  # the hex spelling of the same address
+        ("2001:db8:1:2:aaaa:bbbb:cccc:dddd", None, 0, "2001:db8:1:2::/64"),  # real IPv6 unchanged
+    ],
+)
+def test_an_ipv4_mapped_in_ipv6_is_the_plain_ipv4(
+    peer: str, header: str | None, hops: int, bucket: str
+) -> None:
+    raw = [(b"x-forwarded-for", header.encode())] if header else []
+    scope = {"type": "http", "client": (peer, 1), "headers": raw}
+    assert client_ip(scope, hops) == bucket
+
+
+async def test_two_mapped_ipv4_addresses_have_their_own_buckets(make_client: MakeClient) -> None:
+    a, b = make_client(peer="::ffff:198.51.100.1"), make_client(peer="::ffff:198.51.100.2")
+    assert await statuses(a, LIMIT + 1) == [201] * LIMIT + [429]
+    assert await statuses(b, 1) == [201]  # a shared ::/64 bucket would be spent already
+
+
+async def test_a_mapped_ipv4_and_the_plain_one_share_a_bucket(make_client: MakeClient) -> None:
+    mapped, plain = make_client(peer="::ffff:198.51.100.3"), make_client(peer="198.51.100.3")
+    assert await statuses(mapped, LIMIT) == [201] * LIMIT
+    assert await statuses(plain, 1) == [429]
+
+
+async def test_a_mapped_ipv4_in_the_forwarded_header_has_its_own_bucket(
+    make_client: MakeClient,
+) -> None:
+    c = make_client(hops=1)
+    one, two = "::ffff:203.0.113.1", "::ffff:203.0.113.2"
+    assert await statuses(c, LIMIT + 1, **{"X-Forwarded-For": one}) == [201] * LIMIT + [429]
+    assert await statuses(c, 1, **{"X-Forwarded-For": two}) == [201]
+    assert await statuses(c, 1, **{"X-Forwarded-For": "203.0.113.1"}) == [429]  # same as `one`
+
+
 async def test_a_whole_ipv6_64_shares_one_bucket(make_client: MakeClient) -> None:
     results = []
     for i in range(LIMIT + 1):
