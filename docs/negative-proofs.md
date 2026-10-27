@@ -252,3 +252,11 @@ Real uvicorn (`--no-proxy-headers`), one trusted hop, limit 3.
 | A continuation turned back into a literal backslash and `n` (the old README) | `AssertionError: assert '\n' not in 'uv run pyte...readme.py -q'` | `test_the_command_has_no_literal_backslash_n` |
 | same | `ERROR: file or directory not found: n`, `assert 4 == 0` when the pasted command is collected | `test_the_pasted_command_collects_every_test_without_error` |
 | Old README (a test file missing from the command, the `n` argument) | `the README command and tests/ disagree` | `test_the_command_names_every_test_file_once` |
+
+### Log line of a 500 (`tests/test_headers.py`)
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| The raw decoded path goes to the log | `AssertionError: 'unhandled error on GET /s/x<LF>FAKE LOG LINE<CR><ESC><DEL><0x85>'` (a real newline in the message) | `test_a_500_log_line_carries_no_control_character_and_no_secret_id` |
+| The secret id is not masked (escaping stays) | `AssertionError: unhandled error on GET /s/x\nFAKE LOG LINE...`, the escaped form, but the id and `FAKE` are still in the line | same |
+| Control characters are not escaped (the id mask stays) | `AssertionError: 'unhandled error on GET /x<LF>FAKE LOG LINE<CR><ESC><DEL><0x85><U+2028>é'` | `test_a_path_outside_the_secret_routes_is_escaped_in_the_log` |

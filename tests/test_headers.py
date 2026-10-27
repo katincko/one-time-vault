@@ -8,11 +8,14 @@ import httpx
 import pytest
 import pytest_asyncio
 from redis.asyncio import Redis
+from starlette.templating import Jinja2Templates
+from starlette.types import Message, Receive, Scope, Send
 
 from conftest import SERVER_KEYS
 from one_time_vault.app import create_app
 from one_time_vault.keyring import Keyring
 from one_time_vault.ratelimit import CreateLimiter
+from one_time_vault.security import SecurityHeadersMiddleware
 from one_time_vault.storage import SecretStorage, new_secret_id
 from test_api import body
 
@@ -170,3 +173,59 @@ async def test_each_500_gets_its_own_nonce(
     monkeypatch.setattr(SecretStorage, "create", boom)
     nonces = [nonce_of(await client.post("/api/secrets", json=body())) for _ in range(3)]
     assert len(set(nonces)) == 3
+
+
+async def test_a_500_log_line_carries_no_control_character_and_no_secret_id(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    def boom(*_: object, **__: object) -> None:
+        raise RuntimeError(SECRET_DETAIL)
+
+    async def boom_async(*_: object, **__: object) -> None:
+        raise RuntimeError(SECRET_DETAIL)
+
+    monkeypatch.setattr(Jinja2Templates, "TemplateResponse", boom)
+    monkeypatch.setattr(SecretStorage, "open", boom_async)
+    secret_id = new_secret_id()
+    forged = "x%0AFAKE%20LOG%20LINE%0D%1B%7F%C2%85"
+    with caplog.at_level(logging.ERROR):
+        for path, verb in [
+            (f"/s/{forged}", "GET"),
+            (f"/s/{secret_id}", "GET"),
+            (f"/api/secrets/{secret_id}/reveal", "POST"),
+        ]:
+            res = await client.request(verb, path)
+            assert res.status_code == 500, path
+    records = [r for r in caplog.records if r.exc_info is not None]
+    assert len(records) == 3  # each 500 is logged with its traceback
+    for record in records:
+        text = record.getMessage()
+        assert text.startswith("unhandled error on "), text
+        assert "\n" not in text and "\r" not in text, repr(text)
+        assert not any(ord(c) < 32 or ord(c) == 127 or 0x80 <= ord(c) < 0xA0 for c in text), repr(text)
+        assert secret_id not in text and "FAKE" not in text and "x\n" not in text, text
+    assert "/s/" in records[0].getMessage() and "/api/secrets/" in records[2].getMessage()
+
+
+
+async def test_a_path_outside_the_secret_routes_is_escaped_in_the_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
+        raise RuntimeError(SECRET_DETAIL)
+
+    async def receive() -> Message:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: Message) -> None:
+        pass
+
+    path = "/x\nFAKE LOG LINE\r\x1b\x7f\x85 é"
+    scope: Scope = {"type": "http", "method": "GET", "path": path, "headers": []}
+    with caplog.at_level(logging.ERROR):
+        await SecurityHeadersMiddleware(app)(scope, receive, send)
+    (record,) = [r for r in caplog.records if r.exc_info is not None]
+    text = record.getMessage()
+    assert all(0x20 <= ord(c) < 0x7F for c in text), repr(text)
+    assert text.startswith("unhandled error on GET /x"), text
+    assert "FAKE LOG LINE" in text  # still readable, just on the same line

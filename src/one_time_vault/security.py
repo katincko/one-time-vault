@@ -1,6 +1,7 @@
 """Headers every response carries, pages and API alike, set in one place."""
 
 import logging
+import re
 import secrets
 
 from starlette.datastructures import MutableHeaders
@@ -22,6 +23,20 @@ FIXED_HEADERS = {
     "Referrer-Policy": "no-referrer",
     "Cache-Control": "no-store",
 }
+
+# The segment after these prefixes is a secret id: it never goes to a log.
+_ID_PREFIX = re.compile(r"^(/s/|/api/secrets/)[^/]*")
+_UNSAFE = re.compile(r"[^ -~]")
+
+
+def loggable_path(path: str) -> str:
+    """The path as one safe log token: no secret id, and no character that could forge a line.
+
+    The ASGI path is already percent-decoded, so a caller can put a newline in it. Anything
+    outside printable ASCII is written as an escape sequence (a backslash and hex digits).
+    """
+    path = _ID_PREFIX.sub(lambda m: m.group(1) + "<id>", path)
+    return _UNSAFE.sub(lambda m: m.group().encode("unicode_escape").decode("ascii"), path)
 
 
 class SecurityHeadersMiddleware:
@@ -62,6 +77,6 @@ class SecurityHeadersMiddleware:
         except Exception:
             if started:
                 raise  # too late to change the answer
-            logger.exception("unhandled error on %s %s", scope["method"], scope["path"])
+            logger.exception("unhandled error on %s %s", scope["method"], loggable_path(scope["path"]))
             failure = JSONResponse({"detail": "internal server error"}, status_code=500)
             await failure(scope, receive, send_with_headers)
