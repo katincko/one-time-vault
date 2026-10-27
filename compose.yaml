@@ -1,0 +1,29 @@
+# App and Redis. The server keys are required and are not in this file:
+#   export OTV_SERVER_KEYS="1:$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+#   docker compose up --build
+services:
+  redis:
+    image: redis:7.4@sha256:bd28fff4b665fdf1b73e8b5b73ec05d2f858f4fa3c8ea0d7c9bc09f7f6bf7039
+    # noeviction: when memory is full, creating fails instead of deleting a secret early.
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "noeviction"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  app:
+    build: .
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      OTV_REDIS_URL: redis://redis:6379
+      OTV_SERVER_KEYS: ${OTV_SERVER_KEYS:?set OTV_SERVER_KEYS, see the README}
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/')"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
