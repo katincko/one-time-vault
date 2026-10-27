@@ -202,10 +202,9 @@ async def test_a_500_log_line_carries_no_control_character_and_no_secret_id(
         text = record.getMessage()
         assert text.startswith("unhandled error on "), text
         assert "\n" not in text and "\r" not in text, repr(text)
-        assert not any(ord(c) < 32 or ord(c) == 127 or 0x80 <= ord(c) < 0xA0 for c in text), repr(text)
+        assert all(0x20 <= ord(c) < 0x7F for c in text), repr(text)
         assert secret_id not in text and "FAKE" not in text and "x\n" not in text, text
     assert "/s/" in records[0].getMessage() and "/api/secrets/" in records[2].getMessage()
-
 
 
 async def test_a_path_outside_the_secret_routes_is_escaped_in_the_log(

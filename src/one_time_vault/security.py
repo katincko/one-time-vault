@@ -77,6 +77,7 @@ class SecurityHeadersMiddleware:
         except Exception:
             if started:
                 raise  # too late to change the answer
-            logger.exception("unhandled error on %s %s", scope["method"], loggable_path(scope["path"]))
+            path = loggable_path(scope["path"])
+            logger.exception("unhandled error on %s %s", scope["method"], path)
             failure = JSONResponse({"detail": "internal server error"}, status_code=500)
             await failure(scope, receive, send_with_headers)
