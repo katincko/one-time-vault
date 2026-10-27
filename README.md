@@ -1,7 +1,7 @@
 # one-time-vault
 
 One-time secret vault. The browser encrypts, the server stores ciphertext it cannot read, and a
-link opens once. Done so far: lots 1 to 3 (storage, API and browser pages, access password,
+link opens once. Done so far: lots 1 to 4 (storage, API and browser pages, access password,
 creation limit, security headers). Docker Compose, CI and the demo are still to do.
 
 ## What exists
@@ -40,7 +40,8 @@ creation limit, security headers). Docker Compose, CI and the demo are still to 
   proxies. IPv6 is counted per /64, except an IPv4 mapped into IPv6 (`::ffff:a.b.c.d`), which counts as
   that IPv4 address, in the socket peer and in `X-Forwarded-For`. Over the limit: 429 with `Retry-After`; a body over 16 KB: 413.
 - Headers on every response, pages and API: the spec CSP with a new nonce per response,
-  `nosniff`, HSTS, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`.
+  `nosniff`, HSTS, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`. A 500 carries them too: the
+  error is logged with its traceback and the body is only `{"detail":"internal server error"}`.
 
 Not yet: Docker Compose, CI and the demo. The server checks the ciphertext by padded blocks, so it
 accepts texts up to 10495 bytes; the 10 KB limit is enforced in the browser.
@@ -54,7 +55,9 @@ npm install                       # only TypeScript, for the type check
 uv run ruff check . && uv run mypy && npm run typecheck
 # pytest wants the test files named one by one, and Docker running:
 uv run pytest tests/test_storage.py tests/test_storage_hardening.py tests/test_race.py \
-  tests/test_race_processes.py tests/test_api.py tests/test_browser.py tests/test_canary_finder.py \n  tests/test_browser_crypto.py tests/test_browser_password.py tests/test_headers.py \n  tests/test_limits.py tests/test_password.py tests/test_keyring.py -q
+  tests/test_race_processes.py tests/test_api.py tests/test_browser.py tests/test_canary_finder.py \
+  tests/test_browser_crypto.py tests/test_browser_password.py tests/test_headers.py \
+  tests/test_limits.py tests/test_password.py tests/test_keyring.py tests/test_readme.py -q
 ```
 
 Tests run against real `redis:7.4` and `valkey/valkey:8.0` containers (testcontainers), and the

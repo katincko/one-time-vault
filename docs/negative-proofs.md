@@ -244,3 +244,11 @@ Real uvicorn (`--no-proxy-headers`), one trusted hop, limit 3.
 | same | `assert [201] == [429]`: the mapped and the plain IPv4 do not share a bucket | `test_a_mapped_ipv4_and_the_plain_one_share_a_bucket` |
 | same, address from `X-Forwarded-For` | `assert [429] == [201]` | `test_a_mapped_ipv4_in_the_forwarded_header_has_its_own_bucket` |
 | same, pure function | 6 of 7 rows red, e.g. `AssertionError: assert '::/64' == '198.51.100.7'`; the real IPv6 row stays green | `test_an_ipv4_mapped_in_ipv6_is_the_plain_ipv4` |
+
+### README test command (`tests/test_readme.py`)
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| A continuation turned back into a literal backslash and `n` (the old README) | `AssertionError: assert '\n' not in 'uv run pyte...readme.py -q'` | `test_the_command_has_no_literal_backslash_n` |
+| same | `ERROR: file or directory not found: n`, `assert 4 == 0` when the pasted command is collected | `test_the_pasted_command_collects_every_test_without_error` |
+| Old README (a test file missing from the command, the `n` argument) | `the README command and tests/ disagree` | `test_the_command_names_every_test_file_once` |
