@@ -1,0 +1,7 @@
+# Default rules plus a path allowlist for tool folders that are never part of the repository.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "tool folders"
+paths = ['''(^|/)(\.git|\.venv|node_modules|\.mypy_cache|\.ruff_cache|\.pytest_cache)/''']
