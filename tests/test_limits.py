@@ -166,6 +166,12 @@ def test_client_ip_buckets(peer: str, header: str | None, hops: int, bucket: str
         ("::ffff:10.0.0.9", "7.7.7.7, ::ffff:203.0.113.5", 1, "203.0.113.5"),
         ("::ffff:c633:6407", None, 0, "198.51.100.7"),  # the hex spelling of the same address
         ("2001:db8:1:2:aaaa:bbbb:cccc:dddd", None, 0, "2001:db8:1:2::/64"),  # real IPv6 unchanged
+        # a trusted header that is not an address falls back to the peer, normalized the same way
+        ("::ffff:1.2.3.4", "garbage", 1, "1.2.3.4"),
+        ("::ffff:1.2.3.4", "", 1, "1.2.3.4"),
+        ("2001:db8:1:2:aaaa:bbbb:cccc:dddd", "not an ip", 1, "2001:db8:1:2::/64"),
+        ("10.0.0.9", "7.7.7.7, evil key", 1, "10.0.0.9"),
+        ("not an address", None, 0, "unknown"),  # free text never becomes a key
     ],
 )
 def test_an_ipv4_mapped_in_ipv6_is_the_plain_ipv4(

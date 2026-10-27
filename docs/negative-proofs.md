@@ -266,3 +266,11 @@ Real uvicorn (`--no-proxy-headers`), one trusted hop, limit 3.
 | Planted bug | Red output (reason) | Test |
 |---|---|---|
 | `raise` replaced by `pass` in the `started` branch (the error is swallowed and a second response is sent) | `Failed: DID NOT RAISE <class 'RuntimeError'>` | `test_an_error_after_the_response_started_is_raised_not_answered_twice` |
+
+### Peer fallback in `client_ip` (`tests/test_limits.py`)
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| A trusted header that is not an address returns the raw peer | `AssertionError: assert '::ffff:1.2.3.4' == '1.2.3.4'` and `assert '2001:db8:1:2...bbb:cccc:dddd' == '2001:db8:1:2::/64'` | `test_an_ipv4_mapped_in_ipv6_is_the_plain_ipv4` (rows `garbage` and `not an ip`) |
+| The peer is never normalized (the final `return` is the raw peer) | red, among them `assert '::ffff:198.51.100.7' == '198.51.100.7'`, `assert [201] == [429]` (mapped peer and plain IPv4 in separate buckets) | the same test, `test_a_mapped_ipv4_and_the_plain_one_share_a_bucket`, `test_two_mapped_ipv4_addresses_have_their_own_buckets` |
+| A peer that is free text is the key (the code before the fix) | `AssertionError: assert 'not an address' == 'unknown'` | the same test (row `not an address`) |

@@ -21,15 +21,28 @@ KEY_PREFIX = "ovv:rl:"
 CREATE_PATH = "/api/secrets"
 
 
+def _bucket(address: str) -> str | None:
+    """One normalized bucket for a text that should be an IP address, else None."""
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return None
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        return str(ip.ipv4_mapped)  # ::ffff:a.b.c.d is the IPv4 client a.b.c.d, not a /64
+    if isinstance(ip, ipaddress.IPv6Address):
+        return str(ipaddress.ip_network(f"{ip}/64", strict=False).network_address) + "/64"
+    return str(ip)
+
+
 def client_ip(scope: Scope, trusted_hops: int) -> str:
     """The bucket for this request: the trusted hop's address, else the socket peer.
 
     IPv6 clients are bucketed by /64, since one household or host owns a whole /64. An IPv4
-    address mapped into IPv6 (`::ffff:a.b.c.d`) is the plain IPv4 one.
+    address mapped into IPv6 (`::ffff:a.b.c.d`) is the plain IPv4 one. The peer goes through the
+    same normalization when the header is missing or not an address; free text is never a key.
     """
     client = scope.get("client")
     peer = client[0] if client else "unknown"
-    address = peer
     if trusted_hops > 0:
         entries = [
             e.strip()
@@ -38,16 +51,10 @@ def client_ip(scope: Scope, trusted_hops: int) -> str:
             if e.strip()
         ]
         if len(entries) >= trusted_hops:
-            address = entries[-trusted_hops]
-    try:
-        ip = ipaddress.ip_address(address)
-    except ValueError:
-        return peer  # not an address: never let free text become a key
-    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
-        return str(ip.ipv4_mapped)  # ::ffff:a.b.c.d is the IPv4 client a.b.c.d, not a /64
-    if isinstance(ip, ipaddress.IPv6Address):
-        return str(ipaddress.ip_network(f"{ip}/64", strict=False).network_address) + "/64"
-    return str(ip)
+            bucket = _bucket(entries[-trusted_hops])
+            if bucket is not None:
+                return bucket
+    return _bucket(peer) or "unknown"
 
 
 class CreateLimiter:
