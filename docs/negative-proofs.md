@@ -274,3 +274,34 @@ Real uvicorn (`--no-proxy-headers`), one trusted hop, limit 3.
 | A trusted header that is not an address returns the raw peer | `AssertionError: assert '::ffff:1.2.3.4' == '1.2.3.4'` and `assert '2001:db8:1:2...bbb:cccc:dddd' == '2001:db8:1:2::/64'` | `test_an_ipv4_mapped_in_ipv6_is_the_plain_ipv4` (rows `garbage` and `not an ip`) |
 | The peer is never normalized (the final `return` is the raw peer) | red, among them `assert '::ffff:198.51.100.7' == '198.51.100.7'`, `assert [201] == [429]` (mapped peer and plain IPv4 in separate buckets) | the same test, `test_a_mapped_ipv4_and_the_plain_one_share_a_bucket`, `test_two_mapped_ipv4_addresses_have_their_own_buckets` |
 | A peer that is free text is the key (the code before the fix) | `AssertionError: assert 'not an address' == 'unknown'` | the same test (row `not an address`) |
+
+## Lot 5 (delivery gates)
+
+Each plant was made in the working tree only and removed right after its run; nothing was
+committed. The gates are `scripts/check_dashes.py` and `scripts/gitleaks.sh` (gitleaks v8.30.1,
+image pinned by digest, a pass over the whole history and a pass over the working tree).
+
+### Dash check
+
+| Planted bug | Red output (reason) | Gate |
+|---|---|---|
+| An em dash (U+2014) in a new file `docs/plant.md` | `docs/plant.md:1: em dash (U+2014)`, exit 1 | `uv run python scripts/check_dashes.py` |
+| An en dash (U+2013) appended to the tracked `README.md` | `README.md:220: en dash (U+2013)`, exit 1 | same |
+| En dash removed from the list of forbidden characters | `FAILED test_dash_check.py::test_a_dash_in_a_new_file_is_found_with_its_line[en-dash]` | `tests/test_dash_check.py` |
+| `git ls-files` reduced to tracked files only (a new file is not looked at) | `FAILED ...[em-dash]` and `FAILED ...[en-dash]` | same |
+
+### Gitleaks
+
+A fake GitHub token (`ghp_` plus 36 random characters, made for the run, never written to a
+tracked file) was planted twice.
+
+| Planted bug | Red output (reason) | Gate |
+|---|---|---|
+| The token in an uncommitted file `docs/plant-secret.env` | history pass green (26 commits), working tree pass: `RuleID: github-pat`, `File: /repo/docs/plant-secret.env`, `leaks found: 1`, exit 1 | `sh scripts/gitleaks.sh` |
+| The token committed and then deleted, in a throwaway clone outside the repository | history pass: `RuleID: github-pat`, `File: leak.env`, a `Commit:` line, `27 commits scanned`, `leaks found: 1`, exit 1 (the file was gone from the tree, only the history had it) | same |
+
+### README test command, now under "Tests"
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| The test reader looks for the heading `## Develop`, which the README no longer has | `AssertionError: no code block under Tests`, `assert None`; 3 failed in `test_readme.py` | all three tests of `test_readme.py` |

@@ -10,10 +10,10 @@ ROOT = Path(__file__).parent.parent
 
 
 def readme_test_command() -> str:
-    """The `uv run pytest ...` command of the Develop block, continuation lines joined."""
+    """The `uv run pytest ...` command of the Tests block, continuation lines joined."""
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    block = re.search(r"## Develop\s+```\n(.*?)```", readme, re.DOTALL)
-    assert block, "no code block under Develop"
+    block = re.search(r"## Tests\s+```\n(.*?)```", readme, re.DOTALL)
+    assert block, "no code block under Tests"
     joined = block.group(1).replace("\r\n", "\n").replace("\\" + "\n", " ")
     lines = [ln for ln in joined.split("\n") if ln.startswith("uv run pytest")]
     assert len(lines) == 1, lines
