@@ -218,3 +218,12 @@ Real uvicorn (`--no-proxy-headers`), one trusted hop, limit 3.
 |---|---|---|
 | Client IP is the leftmost `X-Forwarded-For` entry | `assert [201, 201, 201, 201, 201] == [201, 201, 201, 429, 429]` | `test_the_real_server_ignores_a_forged_header_and_answers_429_and_413` |
 | Body limit middleware removed | `assert 422 == 413` | same |
+
+## Lot 4
+
+### Fresh IV and key inside one page load (`tests/test_browser_crypto.py`)
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| IV drawn once at module level and reused by `encrypt` | `AssertionError: an IV was used twice on one page load`, `assert 1 == 4`; and `encrypt repeated an IV`, `assert 1 == (2 * 20)` | `test_one_page_load_never_reuses_an_iv_or_a_key_through_the_form`, `test_the_encrypt_function_never_repeats_an_iv_or_newkey_a_key_in_one_page` |
+| `newKey` caches its key in a module variable | `AssertionError: a key was used twice on one page load`, `assert 1 == 4`; and `newKey repeated a key`, `assert 1 == 20` | same two tests |
