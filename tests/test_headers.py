@@ -229,3 +229,23 @@ async def test_a_path_outside_the_secret_routes_is_escaped_in_the_log(
     assert all(0x20 <= ord(c) < 0x7F for c in text), repr(text)
     assert text.startswith("unhandled error on GET /x"), text
     assert "FAKE LOG LINE" in text  # still readable, just on the same line
+
+
+async def test_an_error_after_the_response_started_is_raised_not_answered_twice() -> None:
+    sent: list[Message] = []
+
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        raise RuntimeError(SECRET_DETAIL)
+
+    async def receive() -> Message:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: Message) -> None:
+        sent.append(message)
+
+    scope: Scope = {"type": "http", "method": "GET", "path": "/", "headers": []}
+    with pytest.raises(RuntimeError, match="hunter2"):
+        await SecurityHeadersMiddleware(app)(scope, receive, send)
+    assert [m["type"] for m in sent] == ["http.response.start"]  # no second start, no 500
+    assert sent[0]["status"] == 200

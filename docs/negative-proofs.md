@@ -260,3 +260,9 @@ Real uvicorn (`--no-proxy-headers`), one trusted hop, limit 3.
 | The raw decoded path goes to the log | `AssertionError: 'unhandled error on GET /s/x<LF>FAKE LOG LINE<CR><ESC><DEL><0x85>'` (a real newline in the message) | `test_a_500_log_line_carries_no_control_character_and_no_secret_id` |
 | The secret id is not masked (escaping stays) | `AssertionError: unhandled error on GET /s/x\nFAKE LOG LINE...`, the escaped form, but the id and `FAKE` are still in the line | same |
 | Control characters are not escaped (the id mask stays) | `AssertionError: 'unhandled error on GET /x<LF>FAKE LOG LINE<CR><ESC><DEL><0x85><U+2028>é'` | `test_a_path_outside_the_secret_routes_is_escaped_in_the_log` |
+
+### Error after the response started (`tests/test_headers.py`)
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| `raise` replaced by `pass` in the `started` branch (the error is swallowed and a second response is sent) | `Failed: DID NOT RAISE <class 'RuntimeError'>` | `test_an_error_after_the_response_started_is_raised_not_answered_twice` |
