@@ -146,7 +146,9 @@ What it does not protect against:
 - **One gate.** `make verify` runs ruff, ruff format, mypy, `tsc`, the whole suite, gitleaks over
   the whole history and the working tree, and a dash check. CI runs the same target.
 - **CI hygiene.** Actions are pinned by commit SHA, the workflow has `contents: read` only,
-  `setup-uv` caches, `uv sync --locked`, and Dependabot watches `github-actions` and `pip`.
+  `setup-uv` caches, `uv sync --locked`, and Dependabot watches `github-actions`, `uv` (the `uv.lock` file) and `npm` (the TypeScript
+  dev dependency in `package.json`). It does not watch the Docker base images or the gitleaks image
+  digest.
   The gitleaks image is pinned by digest.
 - **The README is tested.** The test command below is run by `tests/test_readme.py`, which also
   checks that it names every test file once.
