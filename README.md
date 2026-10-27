@@ -36,7 +36,8 @@ recipient's browser
 - The text is at most 10 KB and is padded to 256-byte blocks before encryption (ISO/IEC 7816-4),
   so the stored size only shows the block count
   (`test_browser.py::test_ciphertext_size_shows_only_the_block_count`,
-  `test_api.py::test_the_largest_ciphertext_is_exactly_the_10kb_text_limit_padded`). The lifetimes
+  `test_api.py::test_valid_sizes_up_to_the_limit_are_accepted`, and one block over the limit is
+  refused in `test_api.py::test_every_refusal_is_an_error_and_stores_nothing`). The lifetimes
   become 3600, 86400 and 604800 seconds (`test_api.py::test_expiry_names_become_seconds`).
 - A link without a whole key (no `#`, cut, padded, wrong characters) shows "Incomplete link" and
   never calls the server
@@ -146,10 +147,9 @@ What it does not protect against:
 - **One gate.** `make verify` runs ruff, ruff format, mypy, `tsc`, the whole suite, gitleaks over
   the whole history and the working tree, and a dash check. CI runs the same target.
 - **CI hygiene.** Actions are pinned by commit SHA, the workflow has `contents: read` only,
-  `setup-uv` caches, `uv sync --locked`, and Dependabot watches `github-actions`, `uv` (the `uv.lock` file) and `npm` (the TypeScript
-  dev dependency in `package.json`). It does not watch the Docker base images or the gitleaks image
-  digest.
-  The gitleaks image is pinned by digest.
+  `setup-uv` caches, `uv sync --locked`, and Dependabot watches `github-actions`, `uv` and `npm`
+  (the TypeScript dev dependency in `package.json`). The Docker base images and the gitleaks image
+  are pinned by digest, and Dependabot does not watch them.
 - **The README is tested.** The test command below is run by `tests/test_readme.py`, which also
   checks that it names every test file once.
 
