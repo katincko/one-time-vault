@@ -1,5 +1,6 @@
 """Spec test 11: security headers on pages and on the API, with a new nonce on every response."""
 
+import logging
 import re
 from collections.abc import AsyncIterator
 
@@ -11,7 +12,8 @@ from redis.asyncio import Redis
 from conftest import SERVER_KEYS
 from one_time_vault.app import create_app
 from one_time_vault.keyring import Keyring
-from one_time_vault.storage import new_secret_id
+from one_time_vault.ratelimit import CreateLimiter
+from one_time_vault.storage import SecretStorage, new_secret_id
 from test_api import body
 
 # The policy as written in the spec, with N standing for the nonce.
@@ -109,3 +111,62 @@ async def test_a_page_never_carries_a_script_without_the_nonce(
     assert not re.search(r"<script(?![^>]*nonce=)", html)
     assert " style=" not in html and "<style" not in html  # style-src 'self' allows neither
     assert not re.search(r"\son\w+=", html)  # no inline event handlers
+
+
+SECRET_DETAIL = "redis password hunter2 at 10.1.2.3"
+
+
+def assert_500_with_the_security_headers(res: httpx.Response) -> None:
+    assert res.status_code == 500
+    assert NONCE.sub("'nonce-N'", res.headers.get("content-security-policy", "")) == SPEC_CSP
+    assert res.headers.get("x-content-type-options") == "nosniff"
+    assert res.headers.get("referrer-policy") == "no-referrer"
+    assert res.headers.get("cache-control") == "no-store"
+    assert re.fullmatch(
+        r"max-age=\d{8,}(; includeSubDomains)?", res.headers.get("strict-transport-security", "")
+    )
+    assert res.json() == {"detail": "internal server error"}
+    assert SECRET_DETAIL not in res.text and "Traceback" not in res.text
+
+
+def logged_the_exception(caplog: pytest.LogCaptureFixture) -> bool:
+    return any(
+        r.exc_info is not None and SECRET_DETAIL in str(r.exc_info[1]) for r in caplog.records
+    )
+
+
+async def test_a_500_from_a_route_has_the_headers_a_generic_body_and_a_log_line(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    async def boom(*_: object, **__: object) -> None:
+        raise RuntimeError(SECRET_DETAIL)
+
+    monkeypatch.setattr(SecretStorage, "create", boom)
+    with caplog.at_level(logging.ERROR):
+        res = await client.post("/api/secrets", json=body())
+    assert_500_with_the_security_headers(res)
+    assert logged_the_exception(caplog)
+
+
+async def test_a_500_from_an_inner_middleware_has_the_headers_a_generic_body_and_a_log_line(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    async def boom(*_: object, **__: object) -> None:
+        raise RuntimeError(SECRET_DETAIL)
+
+    monkeypatch.setattr(CreateLimiter, "hit", boom)  # the limit middleware sits inside
+    with caplog.at_level(logging.ERROR):
+        res = await client.post("/api/secrets", json=body())
+    assert_500_with_the_security_headers(res)
+    assert logged_the_exception(caplog)
+
+
+async def test_each_500_gets_its_own_nonce(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def boom(*_: object, **__: object) -> None:
+        raise RuntimeError(SECRET_DETAIL)
+
+    monkeypatch.setattr(SecretStorage, "create", boom)
+    nonces = [nonce_of(await client.post("/api/secrets", json=body())) for _ in range(3)]
+    assert len(set(nonces)) == 3

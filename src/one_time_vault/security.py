@@ -1,9 +1,13 @@
 """Headers every response carries, pages and API alike, set in one place."""
 
+import logging
 import secrets
 
 from starlette.datastructures import MutableHeaders
+from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+logger = logging.getLogger(__name__)
 
 # `{nonce}` becomes a fresh nonce per response. The page script is the only script, and its nonce
 # lets it load the modules it imports (`strict-dynamic`).
@@ -21,7 +25,12 @@ FIXED_HEADERS = {
 
 
 class SecurityHeadersMiddleware:
-    """Outermost middleware, so 404, 413, 422 and 429 get the headers too."""
+    """Outermost of ours, so 404, 413, 422 and 429 get the headers too.
+
+    An exception nobody handled would reach Starlette's own 500 handler, which sits outside this
+    middleware and adds no headers. So it is caught here: logged with its traceback, and answered
+    with a generic 500 that carries the same headers and none of the detail.
+    """
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -41,4 +50,18 @@ class SecurityHeadersMiddleware:
                     headers[name] = value
             await send(message)
 
-        await self.app(scope, receive, send_with_headers)
+        started = False
+
+        async def tracking_send(message: Message) -> None:
+            nonlocal started
+            started = started or message["type"] == "http.response.start"
+            await send_with_headers(message)
+
+        try:
+            await self.app(scope, receive, tracking_send)
+        except Exception:
+            if started:
+                raise  # too late to change the answer
+            logger.exception("unhandled error on %s %s", scope["method"], scope["path"])
+            failure = JSONResponse({"detail": "internal server error"}, status_code=500)
+            await failure(scope, receive, send_with_headers)

@@ -227,3 +227,11 @@ Real uvicorn (`--no-proxy-headers`), one trusted hop, limit 3.
 |---|---|---|
 | IV drawn once at module level and reused by `encrypt` | `AssertionError: an IV was used twice on one page load`, `assert 1 == 4`; and `encrypt repeated an IV`, `assert 1 == (2 * 20)` | `test_one_page_load_never_reuses_an_iv_or_a_key_through_the_form`, `test_the_encrypt_function_never_repeats_an_iv_or_newkey_a_key_in_one_page` |
 | `newKey` caches its key in a module variable | `AssertionError: a key was used twice on one page load`, `assert 1 == 4`; and `newKey repeated a key`, `assert 1 == 20` | same two tests |
+
+### Security headers on a 500 (`tests/test_headers.py`)
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| No catch in `SecurityHeadersMiddleware` (Starlette's own 500 handler answers, outside our middleware); route raises | `assert '' == "default-src ...ct-src 'none'"` (no CSP on the 500) | `test_a_500_from_a_route_has_the_headers_a_generic_body_and_a_log_line` |
+| Same, the limit middleware (inside) raises | `assert '' == "default-src ...ct-src 'none'"` | `test_a_500_from_an_inner_middleware_has_the_headers_a_generic_body_and_a_log_line` |
+| Same, three 500s in a row | `KeyError: 'content-security-policy'` | `test_each_500_gets_its_own_nonce` |
