@@ -4,9 +4,9 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A one-time secret vault. The browser encrypts, the server stores ciphertext it cannot read, and
-the link opens once. Every guarantee below points to the test that checks it, and the tests for
-the guarantees come with a planted bug shown red for the right reason (see
-[docs/negative-proofs.md](docs/negative-proofs.md)).
+the link opens once. Each guarantee below names the test that checks it (`file::test`). A
+statement with no test says so. The tests for the guarantees come with a planted bug shown red for
+the right reason (see [docs/negative-proofs.md](docs/negative-proofs.md)).
 
 ## The problem
 
@@ -34,27 +34,54 @@ recipient's browser
 ```
 
 - The text is at most 10 KB and is padded to 256-byte blocks before encryption (ISO/IEC 7816-4),
-  so the stored size only shows the block count.
+  so the stored size only shows the block count
+  (`test_browser.py::test_ciphertext_size_shows_only_the_block_count`,
+  `test_api.py::test_the_largest_ciphertext_is_exactly_the_10kb_text_limit_padded`). The lifetimes
+  become 3600, 86400 and 604800 seconds (`test_api.py::test_expiry_names_become_seconds`).
 - A link without a whole key (no `#`, cut, padded, wrong characters) shows "Incomplete link" and
-  never calls the server.
-- Missing, already read, expired and malformed ids all get the same 404, byte for byte.
+  never calls the server
+  (`test_browser.py::test_a_link_without_the_whole_key_says_so_and_never_calls_the_server`).
+- Missing, already read, expired and malformed ids all get the same 404, byte for byte
+  (`test_api.py::test_404_is_byte_identical_for_missing_read_expired_and_malformed`).
+- The page opened by `GET /s/<id>` is the same for every id
+  (`test_api.py::test_the_open_page_is_the_same_for_every_id`).
 - Optional access password, in the style of Bitwarden Send: it is access control, not
   encryption. The browser sends `PBKDF2-SHA256(password, salt = "password" subkey)` with 600,000
   iterations; the server stores `HMAC-SHA256(server key, verifier)` and compares it in Python
   with `hmac.compare_digest`. A wrong verifier counts an attempt in Lua; the fifth one deletes the
-  secret.
-- Creation is limited per client IP (default 20 per hour), counted in Lua. Over the limit: 429
-  with `Retry-After`. A body over 16 KB: 413.
+  secret. Tests: the verifier is PBKDF2 with the `password` subkey as salt
+  (`test_browser_password.py::test_the_verifier_is_pbkdf2_of_the_password_salted_with_the_password_subkey`),
+  the stored value is a keyed hash
+  (`test_password.py::test_the_server_stores_a_keyed_hash_never_the_verifier`), the compare uses
+  `hmac.compare_digest`
+  (`test_storage_hardening.py::test_verifier_is_compared_with_hmac_compare_digest`), five wrong
+  passwords delete the secret (`test_password.py::test_five_wrong_passwords_destroy_the_secret`).
+- Creation is limited per client IP (default 20 per hour, not tested; the tests set their own
+  limit), counted in Lua
+  (`test_limits.py::test_the_count_is_one_atomic_step_under_concurrency`). Over the limit: 429 with
+  `Retry-After` (`test_limits.py::test_the_creation_after_the_limit_is_429_with_retry_after`). A
+  body over the limit: 413, by `Content-Length` or streamed
+  (`test_api.py::test_a_body_over_the_limit_is_413_by_content_length`,
+  `test_api.py::test_a_streamed_body_over_the_limit_is_413_without_content_length`). The 16 KB
+  figure itself is not asserted: the tests use 200,000 bytes and 500,000 streamed bytes, and
+  `test_api.py::test_valid_sizes_up_to_the_limit_are_accepted` checks that the largest valid
+  request fits.
 - Every response, pages, API and 500s, carries the security headers: a CSP with a new nonce per
   response (`default-src 'none'; script-src 'nonce-N' 'strict-dynamic'; connect-src 'self'; ...`),
-  `nosniff`, HSTS, `Referrer-Policy: no-referrer` and `Cache-Control: no-store`.
+  `nosniff`, HSTS, `Referrer-Policy: no-referrer` and `Cache-Control: no-store`. One test checks
+  all of them on 200, 201, 404, 413, 422 and 429 responses, with HSTS `max-age` of at least 8
+  digits (`test_headers.py::test_every_response_has_the_security_headers`); another checks the
+  500s (`test_headers.py::test_a_500_from_a_route_has_the_headers_a_generic_body_and_a_log_line`,
+  `test_headers.py::test_a_500_from_an_inner_middleware_has_the_headers_a_generic_body_and_a_log_line`).
+  The nonce is new per response
+  (`test_headers.py::test_the_nonce_is_new_on_every_response_and_matches_the_script_tag`).
 
-Configuration (environment):
+Configuration (environment). The default values are not tested.
 
 | Variable | Meaning |
 |---|---|
 | `OTV_REDIS_URL` | Redis or Valkey URL, default `redis://localhost:6379` |
-| `OTV_SERVER_KEYS` | Required. `2:<base64url>,1:<base64url>`, 32 bytes or more each. The first one seals new secrets; older versions stay listed until their secrets are gone. The app does not boot without it. |
+| `OTV_SERVER_KEYS` | Required. `2:<base64url>,1:<base64url>`, 32 bytes or more each. The first one seals new secrets; older versions stay listed until their secrets are gone. The app does not boot without it (`test_keyring.py::test_bad_server_keys_refuse_to_boot`, `test_keyring.py::test_the_real_server_process_does_not_start_without_the_keys`). |
 | `OTV_CREATE_LIMIT`, `OTV_CREATE_WINDOW_SECONDS` | Creations per client IP per window, default 20 per 3600 s |
 | `OTV_TRUSTED_HOPS` | Number of proxies in front. The client is the Nth `X-Forwarded-For` entry from the right, so a forged header cannot pick the bucket. With 0 (default) the header is ignored. |
 
