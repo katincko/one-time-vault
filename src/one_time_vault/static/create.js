@@ -19,6 +19,14 @@ const result = byId("result", HTMLElement);
 const link = byId("link", HTMLInputElement);
 const copy = byId("copy", HTMLButtonElement);
 
+form.hidden = false; // hidden in the HTML so that without JavaScript only the noscript error shows
+
+/** Put the Copy button back to its first look (a new link, or a copy that did not work). */
+function resetCopy() {
+  copy.textContent = "Copy";
+  copy.classList.remove("done");
+}
+
 /** @param {string} message */
 function fail(message) {
   errorText.textContent = message;
@@ -30,8 +38,12 @@ form.addEventListener("submit", async (event) => {
   event.preventDefault();
   error.hidden = true;
   button.disabled = true;
+  resetCopy();
   const size = new TextEncoder().encode(text.value).length;
-  if (size === 0) return fail("Write a secret first.");
+  if (size === 0) {
+    text.focus();
+    return fail("Write a secret first.");
+  }
   if (size > MAX_TEXT_BYTES) return fail("The secret is longer than 10 KB.");
   const expiresIn = new FormData(form).get("expires_in");
   try {
@@ -76,6 +88,7 @@ copy.addEventListener("click", async () => {
     copy.textContent = "Copied";
     copy.classList.add("done");
   } catch {
+    resetCopy();
     copy.textContent = "Press Ctrl+C";
   }
 });

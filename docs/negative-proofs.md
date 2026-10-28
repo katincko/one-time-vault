@@ -320,4 +320,23 @@ the Redis 7.4 run (`-k redis-7.4`) of `tests/test_browser_design.py` (6 tests pe
 | `open.js` sets `box.style.margin` (a style attribute made at run time) | `assert 1 == 0` on `[style]`; 1 failed, 5 passed | same |
 | Narrow layout column fixed at `640px` instead of `minmax(0, 640px)` | `assert 133 == 0` (pixels of sideways scroll at 375); 1 failed, 5 passed | `test_the_create_page_does_not_scroll_sideways_at_375` |
 | The revealed secret never wraps (`white-space: pre`) | `assert 4433 == 0`; 1 failed, 5 passed | `test_the_open_page_does_not_scroll_sideways_at_375` |
-| `create.js` no longer adds the `done` class on Copied | `Locator expected to have class 'btn done'`, actual `btn`; 1 failed, 5 passed | `test_copy_keeps_its_button_style_when_it_says_copied` |
+| `create.js` no longer adds the `done` class on Copied | `Locator expected to have class 'btn done'`, actual `btn`; observed on the re-run after the skeptic review: 1 failed in this test and 1 in `test_the_copied_look_is_drawn_and_sets_no_style_attribute`, so 2 failed, 18 passed | `test_copy_keeps_its_button_style_when_it_says_copied` |
+
+### Lot 6, after the skeptic review
+
+Same rules: working tree only, removed right after the run, Redis 7.4 run (`-k redis-7.4`) of
+`tests/test_browser_design.py`, which now has 20 tests per server (19 pass, so each row is 1 failed
+and 19 passed unless it says otherwise).
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| `open.html` status box without `hidden` (JavaScript off) | `Locator expected to have count '1'` (the "Loading." box shows beside the noscript error) | `test_without_javascript_the_open_page_shows_only_the_error` |
+| `create.html` form without `hidden` (JavaScript off) | `Locator expected to be hidden` | `test_without_javascript_the_create_page_shows_only_the_error` |
+| `required` back on the textarea | `Locator expected to have text 'Write a secret first.'` (the browser blocks the empty submit, the script never runs) | `test_an_empty_secret_shows_the_status_and_sends_nothing` |
+| `--field-line` set to the divider colour `#d9dde3` | `('light', '#text', 'border on card', 'rgb(217, 221, 227)', 'rgb(255, 255, 255)')` | `test_the_border_of_every_field_has_3_to_1_in_both_themes` |
+| Submit handler no longer resets the Copy button | `Locator expected to have text 'Copy'` | `test_the_copy_button_is_reset_for_each_new_link` |
+| Failed clipboard write no longer drops the `done` class | `Locator expected to have class 'btn'` | `test_when_the_clipboard_fails_the_button_asks_for_ctrl_c_and_loses_the_copied_look` |
+| The `.btn.done` CSS rule renamed away | `assert 'rgb(31, 111, 92)' != 'rgb(31, 111, 92)'` (the class is still set, the look is not) | `test_the_copied_look_is_drawn_and_sets_no_style_attribute` |
+| `copy.style.width = "112px"` after the `done` class is added | `assert 1 == 0` on `[style]` | same |
+| `.status svg { display: inline; }` (all five icons at once) | `Locator expected to have count '1'` | `test_each_status_shows_exactly_the_icon_of_its_kind` |
+| Narrow-layout breakpoint back at 1080px | `AssertionError: (1100, 2.999520460358056)` (title on three lines at 1100px) | `test_the_title_never_breaks_into_three_lines` |

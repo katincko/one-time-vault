@@ -1,5 +1,5 @@
 /* Direction B of the approved design. Light values come from the design tokens; the dark set
-   keeps the same roles and the same contrast rules (text 4.5:1, borders that carry meaning 3:1). */
+   keeps the same roles and the same contrast rules (text 4.5:1, borders of controls 3:1). */
 :root {
   color-scheme: light dark;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -11,6 +11,7 @@
   --ink2: #3d4350;
   --ink3: #5b6370;
   --line: #d9dde3;
+  --field-line: #848b97; /* 3:1 on every fill it touches: fields are controls (WCAG 1.4.11) */
   --accent: #1f6f5c;
   --on-accent: #ffffff;
   --accent-ink: #1f6f5c;
@@ -32,6 +33,7 @@
     --ink2: #c4cad4;
     --ink3: #9ba4b0;
     --line: #2d343d;
+    --field-line: #66707e;
     --accent-ink: #7fd8bf;
     --accent-soft: #163229;
     --accent-off: #2b4a41;
@@ -88,7 +90,7 @@ main.open h1 { margin-bottom: 14px; font-size: 18px; letter-spacing: -0.015em; }
 /* Fields */
 .fl { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 0 0 6px; padding: 0; font-size: 13px; font-weight: 600; color: var(--ink2); }
 .fl small { font-weight: 500; color: var(--ink3); font-size: 12px; }
-textarea, input:not([type="radio"]) { display: block; width: 100%; font: inherit; color: var(--ink); border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+textarea, input:not([type="radio"]) { display: block; width: 100%; font: inherit; color: var(--ink); border: 1px solid var(--field-line); border-radius: 10px; background: var(--surface); }
 textarea { height: 150px; resize: vertical; padding: 12px 14px; font-family: var(--mono); font-size: 13.5px; line-height: 1.55; background: var(--sunken); }
 input:not([type="radio"]) { height: 40px; padding: 0 12px; font-size: 14px; }
 textarea:focus, input:not([type="radio"]):focus { outline: none; border-color: var(--accent-ink); box-shadow: 0 0 0 3px var(--ring); }
@@ -98,7 +100,7 @@ textarea:focus, input:not([type="radio"]):focus { outline: none; border-color: v
 fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 
 /* Expiry: real radios, hidden only visually, drawn as a segmented control */
-.seg { display: flex; height: 40px; padding: 3px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); gap: 3px; }
+.seg { display: flex; height: 40px; padding: 3px; border-radius: 10px; background: var(--bg); border: 1px solid var(--field-line); gap: 3px; }
 .opt { position: relative; flex: 1; display: flex; }
 .opt input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
 .opt span { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; border-radius: 7px; font-size: 13.5px; font-weight: 550; color: var(--ink2); white-space: nowrap; }
@@ -118,7 +120,7 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .result { margin-top: 24px; padding-top: 22px; border-top: 1px solid var(--line); }
 .linkbox { display: flex; gap: 8px; }
 #link { flex: 1; min-width: 0; height: 44px; font-family: var(--mono); font-size: 12.5px; background: var(--sunken); }
-#copy { flex: none; width: 112px; margin: 0; padding: 0; font-size: 14px; }
+#copy { flex: none; width: auto; min-width: 112px; margin: 0; padding: 0 14px; font-size: 14px; white-space: nowrap; }
 .hint { margin: 12px 0 0; font-size: 13px; color: var(--ink3); line-height: 1.5; }
 
 /* Status: one component, four tones, one icon at a time */
@@ -135,7 +137,7 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 #secret { margin: 16px 0 0; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--sunken); font-family: var(--mono); font-size: 13.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
 
 /* Narrow: brand, card, explanation below */
-@media (max-width: 1080px) {
+@media (max-width: 1240px) {
   main.create {
     grid-template-columns: minmax(0, 640px);
     grid-template-rows: auto;

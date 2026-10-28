@@ -17,6 +17,7 @@ const submit = byId("open-secret", HTMLButtonElement);
  * @param {string} text
  */
 function say(tone, icon, text) {
+  box.hidden = false; // hidden in the HTML so that without JavaScript only the noscript error shows
   box.dataset.tone = tone;
   box.dataset.icon = icon;
   status.textContent = text;
