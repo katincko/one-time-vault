@@ -14,13 +14,14 @@ const text = byId("text", HTMLTextAreaElement);
 const password = byId("password", HTMLInputElement);
 const button = byId("create", HTMLButtonElement);
 const error = byId("error", HTMLElement);
+const errorText = byId("error-text", HTMLElement);
 const result = byId("result", HTMLElement);
 const link = byId("link", HTMLInputElement);
 const copy = byId("copy", HTMLButtonElement);
 
 /** @param {string} message */
 function fail(message) {
-  error.textContent = message;
+  errorText.textContent = message;
   error.hidden = false;
   button.disabled = false;
 }
@@ -73,6 +74,7 @@ copy.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(link.value);
     copy.textContent = "Copied";
+    copy.classList.add("done");
   } catch {
     copy.textContent = "Press Ctrl+C";
   }

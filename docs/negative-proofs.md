@@ -305,3 +305,19 @@ tracked file) was planted twice.
 | Planted bug | Red output (reason) | Test |
 |---|---|---|
 | The test reader looks for the heading `## Develop`, which the README no longer has | `AssertionError: no code block under Tests`, `assert None`; 3 failed in `test_readme.py` | all three tests of `test_readme.py` |
+
+## Lot 6 (page design, direction B)
+
+Each plant was made in the working tree only and removed right after its run. Red counts are for
+the Redis 7.4 run (`-k redis-7.4`) of `tests/test_browser_design.py` (6 tests per server).
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| The 7 days option is a checkbox instead of a radio | `assert ['1h', '1d'] == ['1h', '1d', '7d']`; 2 failed, 4 passed | `test_browser_design.py::test_the_three_expiry_options_are_radios_and_the_chosen_one_is_sent` and `test_the_chosen_option_shows_a_mark_and_the_keyboard_moves_it` |
+| `create.js` always sends `expires_in: "1d"` | `assert ['1d'] == ['1h']`; 1 failed, 5 passed | `test_the_three_expiry_options_are_radios_and_the_chosen_one_is_sent` |
+| The check mark of the chosen option is `display: none` | `Locator expected to be visible ... hidden`; 1 failed, 5 passed | `test_the_chosen_option_shows_a_mark_and_the_keyboard_moves_it` |
+| `style="margin:0"` on the status box of `open.html` | `assert 1 == 0` on `locator('[style]').count()`; 1 failed, 5 passed | `test_no_element_ever_carries_a_style_attribute` |
+| `open.js` sets `box.style.margin` (a style attribute made at run time) | `assert 1 == 0` on `[style]`; 1 failed, 5 passed | same |
+| Narrow layout column fixed at `640px` instead of `minmax(0, 640px)` | `assert 133 == 0` (pixels of sideways scroll at 375); 1 failed, 5 passed | `test_the_create_page_does_not_scroll_sideways_at_375` |
+| The revealed secret never wraps (`white-space: pre`) | `assert 4433 == 0`; 1 failed, 5 passed | `test_the_open_page_does_not_scroll_sideways_at_375` |
+| `create.js` no longer adds the `done` class on Copied | `Locator expected to have class 'btn done'`, actual `btn`; 1 failed, 5 passed | `test_copy_keeps_its_button_style_when_it_says_copied` |

@@ -2,12 +2,25 @@
 import { byId } from "./dom.js";
 import { b64urlDecode, b64urlEncode, decrypt, parseKey, passwordVerifier } from "./vault-crypto.js";
 
+const box = byId("status-box", HTMLElement);
 const status = byId("status", HTMLElement);
 const reveal = byId("reveal", HTMLButtonElement);
 const secret = byId("secret", HTMLElement);
 const form = byId("password-form", HTMLFormElement);
 const password = byId("access-password", HTMLInputElement);
 const submit = byId("open-secret", HTMLButtonElement);
+
+/**
+ * Show a message in the status component: a tone (info, warn, err, ok) and an icon.
+ * @param {"info" | "warn" | "err" | "ok"} tone
+ * @param {"loader" | "info" | "key" | "alert" | "check"} icon
+ * @param {string} text
+ */
+function say(tone, icon, text) {
+  box.dataset.tone = tone;
+  box.dataset.icon = icon;
+  status.textContent = text;
+}
 
 const id = location.pathname.split("/").pop() ?? "";
 
@@ -41,7 +54,7 @@ async function revealSecret(key, verifier) {
       }),
     });
   } catch {
-    status.textContent = "Could not reach the server. The secret was not opened; try again.";
+    say("err", "alert", "Could not reach the server. The secret was not opened; try again.");
     reveal.disabled = false;
     submit.disabled = false;
     return;
@@ -50,7 +63,7 @@ async function revealSecret(key, verifier) {
     clearFragment();
     reveal.hidden = true;
     form.hidden = true;
-    status.textContent = "This secret does not exist, was already read or has expired.";
+    say("err", "alert", "This secret does not exist, was already read or has expired.");
     return;
   }
   if (res.status === 403) {
@@ -58,7 +71,7 @@ async function revealSecret(key, verifier) {
     return;
   }
   if (!res.ok) {
-    status.textContent = `Unexpected server error (HTTP ${res.status}). Try again.`;
+    say("err", "alert", `Unexpected server error (HTTP ${res.status}). Try again.`);
     reveal.disabled = false;
     submit.disabled = false;
     return;
@@ -70,10 +83,13 @@ async function revealSecret(key, verifier) {
   try {
     secret.textContent = await decrypt(key, b64urlDecode(body.iv), b64urlDecode(body.ciphertext));
     secret.hidden = false;
-    status.textContent = "Secret opened. It is now deleted from the server.";
+    say("ok", "check", "Secret opened. It is now deleted from the server.");
   } catch {
-    status.textContent =
-      "Could not decrypt. The link is damaged or the secret was altered. It is deleted from the server.";
+    say(
+      "err",
+      "alert",
+      "Could not decrypt. The link is damaged or the secret was altered. It is deleted from the server.",
+    );
   }
 }
 
@@ -87,14 +103,14 @@ async function askForPassword(key, answer) {
   if (answer.error === "wrong_password" && answer.attempts_left === 0) {
     clearFragment();
     form.hidden = true;
-    status.textContent = "Wrong password. The secret is deleted from the server.";
+    say("err", "alert", "Wrong password. The secret is deleted from the server.");
     return;
   }
   if (answer.error === "wrong_password") {
-    status.textContent = `Wrong password. ${answer.attempts_left} attempts left.`;
+    say("warn", "key", `Wrong password. ${answer.attempts_left} attempts left.`);
   } else {
     iterations = Number(answer.iterations);
-    status.textContent = "This secret needs a password.";
+    say("info", "key", "This secret needs a password.");
   }
   form.hidden = false;
   submit.disabled = false;
@@ -103,7 +119,7 @@ async function askForPassword(key, answer) {
   form.onsubmit = async (event) => {
     event.preventDefault();
     submit.disabled = true;
-    status.textContent = "Checking the password.";
+    say("info", "loader", "Checking the password.");
     const verifier = await passwordVerifier(password.value, key, iterations);
     password.value = "";
     await revealSecret(key, verifier);
@@ -117,11 +133,14 @@ function render() {
   if (!key) {
     // No whole key: nothing to decrypt with, so do not call the server (that would burn the secret).
     reveal.hidden = true;
-    status.textContent =
-      "Incomplete link. Ask the sender for the full link, including the part after #.";
+    say(
+      "warn",
+      "alert",
+      "Incomplete link. Ask the sender for the full link, including the part after #.",
+    );
     return;
   }
-  status.textContent = "Ready. Opening the secret deletes it from the server.";
+  say("info", "info", "Ready. Opening the secret deletes it from the server.");
   reveal.hidden = false;
   reveal.onclick = () => revealSecret(key, null);
 }

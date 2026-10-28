@@ -8,30 +8,49 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <main>
-    <h1>One-time vault</h1>
-    <p>Write a secret. It is encrypted in your browser, and the link can be opened once.</p>
-    <noscript><p class="error">This page needs JavaScript to encrypt in your browser.</p></noscript>
-    <form id="create-form">
-      <label for="text">Secret (up to 10 KB)</label>
-      <textarea id="text" rows="8" autocomplete="off" spellcheck="false" required></textarea>
-      <label for="password">Password (optional)</label>
-      <input id="password" type="password" autocomplete="new-password">
-      <fieldset>
-        <legend>Expires after</legend>
-        <label><input type="radio" name="expires_in" value="1h"> 1 hour</label>
-        <label><input type="radio" name="expires_in" value="1d" checked> 1 day</label>
-        <label><input type="radio" name="expires_in" value="7d"> 7 days</label>
-      </fieldset>
-      <button type="submit" id="create">Create link</button>
-    </form>
-    <p id="error" class="error" role="alert" hidden></p>
-    <section id="result" hidden>
-      <label for="link">Your one-time link</label>
-      <input id="link" readonly>
-      <button type="button" id="copy">Copy</button>
-      <p>Anyone with this link can read the secret once. The part after # never leaves your browser.</p>
+  <main class="create">
+    <div class="brand"><span class="mark"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>One-time vault</div>
+    <section class="intro">
+      <h1>A one-time link the server cannot read.</h1>
+      <p>Your browser encrypts the secret before it leaves. The server keeps only encrypted data, and deletes it on the first read.</p>
+      <p class="caveat">This holds as long as your browser runs this site's own code. The README explains the limits.</p>
+      <ol class="flow">
+        <li class="step"><span class="num" aria-hidden="true">1</span><div><strong>Your browser encrypts</strong><span>AES-GCM with a new 256-bit key. The server gets the encrypted data and the settings you chose.</span></div></li>
+        <li class="step"><span class="num" aria-hidden="true">2</span><div><strong>The key stays in the link</strong><span>It goes after the #, which browsers never send to a server.</span></div></li>
+        <li class="step"><span class="num" aria-hidden="true">3</span><div><strong>One read, then gone</strong><span>Reading and deleting are one step on the server. A second read looks like a link that never existed.</span></div></li>
+      </ol>
     </section>
+    <div class="card">
+      <noscript><div class="status" data-tone="err" data-icon="alert"><svg class="i-alert" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg><p>This page needs JavaScript to encrypt in your browser.</p></div></noscript>
+      <form id="create-form">
+        <label class="fl" for="text">Secret <small>up to 10 KB</small></label>
+        <textarea id="text" rows="8" autocomplete="off" spellcheck="false" required></textarea>
+        <div class="row">
+          <div>
+            <label class="fl" for="password">Password <small>optional</small></label>
+            <input id="password" type="password" autocomplete="new-password">
+          </div>
+          <fieldset>
+            <legend class="fl">Expires after</legend>
+            <div class="seg">
+            <label class="opt"><input type="radio" name="expires_in" value="1h"><span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>1 hour</span></label>
+            <label class="opt"><input type="radio" name="expires_in" value="1d" checked><span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>1 day</span></label>
+            <label class="opt"><input type="radio" name="expires_in" value="7d"><span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>7 days</span></label>
+            </div>
+          </fieldset>
+        </div>
+        <button type="submit" id="create" class="btn">Create link</button>
+      </form>
+      <div id="error" class="status" data-tone="err" data-icon="alert" role="alert" hidden><svg class="i-alert" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg><p id="error-text"></p></div>
+      <section id="result" class="result" hidden>
+        <label class="fl" for="link">Your one-time link</label>
+        <div class="linkbox">
+          <input id="link" readonly>
+          <button type="button" id="copy" class="btn">Copy</button>
+        </div>
+        <p class="hint">Anyone with this link can read the secret once. The part after # never leaves your browser.</p>
+      </section>
+    </div>
   </main>
   <script type="module" nonce="{{ request.state.csp_nonce }}" src="/static/create.js"></script>
 </body>
