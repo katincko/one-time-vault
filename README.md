@@ -147,8 +147,10 @@ What it does not protect against:
   tested against every encoding it claims to find (`test_canary_finder.py`).
 - **Real services.** No fake Redis: containers for Redis and Valkey, and a real uvicorn process for
   the tests that need one.
-- **One gate.** `make verify` runs ruff, ruff format, mypy, `tsc`, the whole suite, gitleaks over
-  the whole history and the working tree, and a dash check. CI runs the same target.
+- **One gate.** `make verify` runs ruff, ruff format, mypy, `tsc`, the whole suite, a
+  dependency audit (`pip-audit` over the locked set, which needs the network), gitleaks over the
+  whole history and the working tree, and a dash check. CI runs the same target, and the audit
+  also as a step of its own.
 - **CI hygiene.** Actions are pinned by commit SHA, the workflow has `contents: read` only,
   `setup-uv` caches, `uv sync --locked`, and Dependabot watches `github-actions`, `uv` and `npm`
   (the TypeScript dev dependency in `package.json`). The Docker base images and the gitleaks image

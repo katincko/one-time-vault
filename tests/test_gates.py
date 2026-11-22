@@ -32,3 +32,18 @@ def test_uvicorn_does_not_name_itself_in_the_image_or_in_the_readme_command() ->
 def test_the_readme_claims_the_headers_only_for_what_the_app_produces() -> None:
     assert "Every response the app produces" in README
     assert re.search(r"protocol error.{0,200}uvicorn", README, re.DOTALL)
+
+
+def test_the_dependency_audit_is_a_step_of_make_verify_and_of_the_ci() -> None:
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    verify = makefile.split("verify:", 1)[1]
+    assert "\tsh scripts/audit.sh\n" in verify
+    ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert re.search(r"- name: Dependency audit\n\s+run: sh scripts/audit.sh\n", ci)
+
+
+def test_the_audit_script_audits_the_locked_set_without_the_editable_project() -> None:
+    script = (ROOT / "scripts" / "audit.sh").read_text(encoding="utf-8")
+    assert "uv export --locked --all-groups" in script
+    assert "grep -v '^-e '" in script
+    assert "uvx pip-audit --no-deps --disable-pip -r" in script

@@ -31,4 +31,6 @@ jobs:
       - run: uv sync --locked
       - run: npm ci
       - run: uv run playwright install --with-deps chromium
+      - name: Dependency audit
+        run: sh scripts/audit.sh
       - run: make verify
