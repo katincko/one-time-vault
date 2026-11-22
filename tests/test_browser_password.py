@@ -11,6 +11,7 @@ from redis import Redis as SyncRedis
 from browser_kit import Tab, b64url, redis_bytes, request_bytes, stored_keys, unb64url
 from canary import find_leaks
 from conftest import LiveServer
+from request_shape import assert_requests_have_the_expected_shape
 
 PASSWORD = "correct horse battery staple"
 
@@ -87,6 +88,7 @@ def test_the_password_never_reaches_the_server(
     enter_password(tab, canary)
     expect(tab.page.locator("#secret")).to_have_text("some text")
     assert len([r for r in tab.requests if r.method == "POST"]) == 3  # create, ask, answer
+    assert_requests_have_the_expected_shape(tab.requests)
     logs = live_server.log()
     assert b"POST /api/secrets" in logs
     for where, haystack in (

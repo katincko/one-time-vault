@@ -18,6 +18,7 @@ from redis import Redis as SyncRedis
 from browser_kit import Tab, b64url, redis_bytes, request_bytes, stored_keys, unb64url
 from canary import find_leaks
 from conftest import LiveServer
+from request_shape import assert_requests_have_the_expected_shape
 
 # Test 1: neither the text nor the key ever reaches the server
 
@@ -36,6 +37,7 @@ def test_neither_the_text_nor_the_key_leaves_the_browser(
                 assert find_leaks(haystack, needle) == [], f"{what} canary in {where}, {stage}"
 
     link = tab.create(f"my password is {text_canary}\nline two")
+    assert_requests_have_the_expected_shape(tab.requests)  # whatever the encoding, nothing extra
     key_canary = unb64url(link.split("#", 1)[1])  # the generated key, as a leak would carry it
     assert len(key_canary) == 32
     needles["key"] = key_canary
@@ -50,6 +52,7 @@ def test_neither_the_text_nor_the_key_leaves_the_browser(
     expect(tab.page.locator("#secret")).to_contain_text(text_canary)  # the flow really ran
     assert len([r for r in tab.requests if r.method == "POST"]) == 2
     assert_clean("after reveal", request_bytes(tab.requests), in_redis)
+    assert_requests_have_the_expected_shape(tab.requests)
 
 
 # Test 4 (browser half): a browser that opens the link without clicking
