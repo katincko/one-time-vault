@@ -19,4 +19,5 @@ USER vault
 EXPOSE 8000
 
 # --no-proxy-headers: the app does its own client IP logic (OTV_TRUSTED_HOPS).
-CMD ["/app/.venv/bin/uvicorn", "--factory", "--no-proxy-headers", "--host", "0.0.0.0", "--port", "8000", "one_time_vault.app:app_from_env"]
+# --no-server-header: the answers do not name the server software.
+CMD ["/app/.venv/bin/uvicorn", "--factory", "--no-proxy-headers", "--no-server-header", "--host", "0.0.0.0", "--port", "8000", "one_time_vault.app:app_from_env"]

@@ -67,8 +67,8 @@ recipient's browser
   figure itself is not asserted: the tests use 200,000 bytes and 500,000 streamed bytes, and
   `test_api.py::test_valid_sizes_up_to_the_limit_are_accepted` checks that the largest valid
   request fits.
-- Every response, pages, API and 500s, carries the security headers: a CSP with a new nonce per
-  response (`default-src 'none'; script-src 'nonce-N' 'strict-dynamic'; connect-src 'self'; ...`),
+- Every response the app produces, pages, API and 500s, carries the security headers: a CSP with
+  a new nonce per response (`default-src 'none'; script-src 'nonce-N' 'strict-dynamic'; connect-src 'self'; ...`),
   `nosniff`, HSTS, `Referrer-Policy: no-referrer` and `Cache-Control: no-store`. One test checks
   all of them on 200, 201, 404, 413, 422 and 429 responses, with HSTS `max-age` of at least 8
   digits (`test_headers.py::test_every_response_has_the_security_headers`); another checks the
@@ -76,6 +76,9 @@ recipient's browser
   `test_headers.py::test_a_500_from_an_inner_middleware_has_the_headers_a_generic_body_and_a_log_line`).
   The nonce is new per response
   (`test_headers.py::test_the_nonce_is_new_on_every_response_and_matches_the_script_tag`).
+  A protocol error (a malformed request line, for example) is answered by uvicorn before the app
+  runs, so that 400 carries none of these headers (seen by hand on the real server; no test). The
+  proxy in front, which the app needs for TLS anyway, must add them to those answers.
 
 Configuration (environment). The default values are not tested.
 
@@ -200,10 +203,11 @@ Local (Python 3.12, uv, and a Redis or Valkey on `localhost:6379`):
 ```
 uv sync --locked
 export OTV_SERVER_KEYS="1:$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-uv run uvicorn --factory --no-proxy-headers one_time_vault.app:app_from_env
+uv run uvicorn --factory --no-proxy-headers --no-server-header one_time_vault.app:app_from_env
 ```
 
 `--no-proxy-headers`: the app does its own client IP logic (`OTV_TRUSTED_HOPS`).
+`--no-server-header`: the answers do not name the server software.
 
 Docker Compose (app and Redis; the server keys are not in the file and the app does not boot
 without them):
@@ -220,10 +224,10 @@ Open http://127.0.0.1:8000. `docker compose down -v` stops it and drops the data
 ```
 uv run pytest tests/test_access_log.py tests/test_api.py tests/test_browser.py \
   tests/test_browser_crypto.py tests/test_browser_design.py tests/test_browser_password.py \
-  tests/test_canary_finder.py tests/test_dash_check.py tests/test_headers.py tests/test_keyring.py \
-  tests/test_limits.py tests/test_password.py tests/test_race.py tests/test_race_processes.py \
-  tests/test_readme.py tests/test_request_shape.py tests/test_storage.py \
-  tests/test_storage_hardening.py -q
+  tests/test_canary_finder.py tests/test_dash_check.py tests/test_gates.py tests/test_headers.py \
+  tests/test_keyring.py tests/test_limits.py tests/test_password.py tests/test_race.py \
+  tests/test_race_processes.py tests/test_readme.py tests/test_request_shape.py \
+  tests/test_storage.py tests/test_storage_hardening.py -q
 ```
 
 Docker must be running: the tests start real `redis:7.4` and `valkey/valkey:8.0` containers, and the
