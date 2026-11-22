@@ -30,7 +30,7 @@ from one_time_vault.keyring import (
     iterations_of,
 )
 from one_time_vault.ratelimit import CreateLimiter, CreateLimitMiddleware
-from one_time_vault.security import SecurityHeadersMiddleware
+from one_time_vault.security import SecurityHeadersMiddleware, mask_access_log
 from one_time_vault.storage import (
     ID_LENGTH,
     NotFound,
@@ -259,6 +259,7 @@ def app_from_env() -> FastAPI:
     The server keys are required: without `OTV_SERVER_KEYS` this raises and the app does not boot.
     """
     env = os.environ
+    mask_access_log()  # uvicorn's access log writes the request line, and the line holds the id
     return create_app(
         Redis.from_url(env.get("OTV_REDIS_URL", "redis://localhost:6379")),
         Keyring.parse(env.get("OTV_SERVER_KEYS")),

@@ -39,6 +39,30 @@ def loggable_path(path: str) -> str:
     return _UNSAFE.sub(lambda m: m.group().encode("unicode_escape").decode("ascii"), path)
 
 
+class AccessLogMask(logging.Filter):
+    """Masks the secret id in uvicorn's access log, whatever flags the server was started with.
+
+    uvicorn calls the logger with `(client, method, path, http_version, status)`. A record of
+    any other shape is dropped and reported: better no line than a line that could hold an id.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) == 5 and isinstance(args[2], str):
+            record.args = (*args[:2], loggable_path(args[2]), *args[3:])
+            return True
+        logger.warning("access log record dropped: unexpected arguments")
+        return False
+
+
+_ACCESS_LOG_MASK = AccessLogMask()
+
+
+def mask_access_log() -> None:
+    """Install the mask on uvicorn's access log (idempotent: the same filter object)."""
+    logging.getLogger("uvicorn.access").addFilter(_ACCESS_LOG_MASK)
+
+
 class SecurityHeadersMiddleware:
     """Outermost of ours, so 404, 413, 422 and 429 get the headers too.
 
