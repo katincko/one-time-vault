@@ -14,7 +14,9 @@ A password sent by chat or e-mail stays in that chat or mailbox for good. One-ti
 that, but most only claim that the server cannot read what you store. Here the claim is tested:
 two canaries (the text and the generated key) are searched, in several encodings, in every
 request the browser makes, in the server log and in every Redis key
-(`tests/test_browser.py::test_neither_the_text_nor_the_key_leaves_the_browser`). The claim
+(`tests/test_browser.py::test_neither_the_text_nor_the_key_leaves_the_browser`), and every request
+the page sends is checked as a structure, whatever the encoding: header names from an allowed
+list and exactly the expected keys in each API body (`tests/request_shape.py`). The claim
 depends on the browser receiving the JavaScript in this repository (see the threat model).
 
 ## How it works
@@ -200,6 +202,18 @@ fix.
 | The socket peer fallback skipped that rule, and a peer that was free text became a bucket key | The peer gets the same normalization as the header address | `a919b75` | `test_limits.py::test_an_ipv4_mapped_in_ipv6_is_the_plain_ipv4` |
 | The README test command had a literal backslash and `n`, and missed a test file | The command is tested as pasted | `df822f5` | `test_readme.py::test_the_pasted_command_collects_every_test_without_error` |
 
+Found in the audit before going public (see "Before going public" in
+[docs/negative-proofs.md](docs/negative-proofs.md)):
+
+| Finding | Fix | Commit | Test |
+|---|---|---|---|
+| uvicorn's access log wrote `GET /s/<id>` and `POST /api/secrets/<id>/...` with the client IP | The access log is masked by the same function as the 500 log, whatever flags the server runs with | `d3bbe65` | `test_access_log.py::test_the_server_log_never_holds_the_id_of_a_secret` |
+| The leak canary only knew some encodings of the key (a hex header with colons or a JSON array of decimals passed) | Structural check of every request: allowed header names, exact body keys | `1481082` | `test_request_shape.py`, `test_browser.py::test_neither_the_text_nor_the_key_leaves_the_browser` |
+| The README said every response has the security headers, but uvicorn answers protocol errors alone | The claim is for what the app produces; `--no-server-header` | `ad076e1` | `test_gates.py::test_the_readme_claims_the_headers_only_for_what_the_app_produces` |
+| Two locked dependencies with known vulnerabilities, and no scan | Both updated; `pip-audit` in `make verify` and in the CI | `ae5e00b` | `test_gates.py::test_the_dependency_audit_is_a_step_of_make_verify_and_of_the_ci` |
+| The test images were tags, not digests | Pinned by digest, Redis read from `compose.yaml` | `b375374` | `test_gates.py::test_the_test_images_are_pinned_by_digest_and_redis_is_the_one_of_the_compose_file` |
+| The open page accepted any PBKDF2 iteration count from the server and ignored a failed derivation | The count must be inside the server limits; a failure shows an error | `2cdafa1` | `test_browser_iterations.py` |
+
 ## Run
 
 Local (Python 3.12, uv, and a Redis or Valkey on `localhost:6379`):
@@ -211,7 +225,9 @@ uv run uvicorn --factory --no-proxy-headers --no-server-header one_time_vault.ap
 ```
 
 `--no-proxy-headers`: the app does its own client IP logic (`OTV_TRUSTED_HOPS`).
-`--no-server-header`: the answers do not name the server software.
+`--no-server-header`: the answers do not name the server software. uvicorn's access log stays on
+with the secret id masked (`GET /s/<id>`), whatever flags are used
+(`test_access_log.py::test_the_server_log_never_holds_the_id_of_a_secret`).
 
 Docker Compose (app and Redis; the server keys are not in the file and the app does not boot
 without them):

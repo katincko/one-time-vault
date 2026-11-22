@@ -340,3 +340,68 @@ and 19 passed unless it says otherwise).
 | `copy.style.width = "112px"` after the `done` class is added | `assert 1 == 0` on `[style]` | same |
 | `.status svg { display: inline; }` (all five icons at once) | `Locator expected to have count '1'` | `test_each_status_shows_exactly_the_icon_of_its_kind` |
 | Narrow-layout breakpoint back at 1080px | `AssertionError: (1100, 2.999520460358056)` (title on three lines at 1100px) | `test_the_title_never_breaks_into_three_lines` |
+
+## Before going public
+
+Findings of an audit made before the repository could be opened. Each plant was made in the
+working tree only, the file was restored from a copy right after the run, and the sha256 (first 12
+hex digits) of the restored file is the one of the plant's start. Redis 7.4 runs.
+
+### Access log without the secret id (`tests/test_access_log.py`)
+
+| Planted bug | Red output (reason) | Gate |
+|---|---|---|
+| Before the fix, with no plant: uvicorn's access log as it was | `assert b'GET /s/<id> HTTP/1.1' in b'...GET /s/lwcnGxnCGjGOziosUSOg8Q HTTP/1.1" 200 OK'` on Redis and on Valkey | `test_access_log.py::test_the_server_log_never_holds_the_id_of_a_secret` |
+| `mask_access_log()` no longer called by `app_from_env` (`app.py`, sha256 `597219104746`) | same assert, with the real id in the captured log of the real server process; 2 failed, 1 passed | same |
+
+The test creates, opens and reveals a secret on the real server process and searches its log.
+
+### Structural check of the requests (`tests/request_shape.py`, `tests/test_request_shape.py`)
+
+The canary finder looks for known encodings, so these two leaks passed it. `create.js` sha256
+`3a3358619ef6`.
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| `create.js` sends the key in a header `x-trace`, hex with colons | `POST .../api/secrets: header x-trace is not allowed` (the canary check before it in the same test passed) | `test_browser.py::test_neither_the_text_nor_the_key_leaves_the_browser` |
+| `create.js` sends the key as a JSON array of decimals in a body to `/api/secrets/zzz` | `POST /api/secrets/zzz is not a request the page may make` | same |
+| The same two leaks as plain data, plus an extra body key, a text in `expires_in` and an array in `iv` | `header x-trace is not allowed`, `body keys [...] are not one of [...]`, `body field expires_in ...`, `body field iv is not a base64url string` | `test_request_shape.py` (each of its tests) |
+
+A body key planted in the real page cannot reach the check: the server answers 422 to an extra
+key (`extra="forbid"`), the flow stops earlier. The body rules are proven on the plain data above.
+
+### Headers claim and server header (`tests/test_gates.py`)
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| `"--no-server-header"` removed from the Dockerfile `CMD` (sha256 `ce927ac3cff9`) | `assert '"--no-server-header"' in '["/app/.venv/bin/uvicorn", ...]'` | `test_uvicorn_does_not_name_itself_in_the_image_or_in_the_readme_command` |
+| README text back to "Every response" | `assert 'Every response the app produces' in '# one-time-vault ...'` | `test_the_readme_claims_the_headers_only_for_what_the_app_produces` |
+
+The 400 without headers was seen by hand on the real server (`GARBAGE` as a request line): `400 Bad
+Request`, `content-type`, `Connection: close`, nothing else. No test.
+
+### Dependency audit (`scripts/audit.sh`)
+
+| Planted bug | Red output (reason) | Gate |
+|---|---|---|
+| The lock of the previous commit (`git show HEAD~:uv.lock`, in a copy of the project, `sh scripts/audit.sh <copy>`) | `Found 3 known vulnerabilities in 2 packages`, `certifi 2026.7.22 PYSEC-2026-4320`, `opentelemetry-api 1.45.1 CVE-2026-126360`, exit 1 | `sh scripts/audit.sh` |
+| The audit line removed from `make verify` (`Makefile`, sha256 `b384f06b5d88`) | `assert '\tsh scripts/audit.sh\n' in '\n\tuv run ruff check .\n...'` | `test_gates.py::test_the_dependency_audit_is_a_step_of_make_verify_and_of_the_ci` |
+
+With the updated lock the script prints `No known vulnerabilities found` and exits 0.
+
+### Test images by digest (`tests/test_gates.py`)
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| The Valkey image back to the tag `valkey/valkey:8.0` (`conftest.py`, sha256 `b1e05a447606`) | `AssertionError: valkey/valkey:8.0` (no `@sha256:` part) | `test_the_test_images_are_pinned_by_digest_and_redis_is_the_one_of_the_compose_file` |
+
+### PBKDF2 iterations on the open page (`tests/test_browser_iterations.py`)
+
+`open.js` sha256 `c3ecc9495a5c`, `vault-crypto.js` sha256 `66d52dc63488`.
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| Before the fix, with no plant: iterations 1 from a route | `unexpected value "Checking the password."` / `"This secret needs a password."` instead of the refusal; 10 failed | the 9 refusal cases and the derivation case |
+| The range check in `askForPassword` replaced by `false` | `unexpected value "This secret needs a password."` (the form opens for iterations 1, 2^31 and text) | `test_an_iteration_count_outside_the_limits_is_refused_and_nothing_more_is_sent` |
+| The `try`/`catch` around `passwordVerifier` removed | `unexpected value "Checking the password."` (the page stays on it) | `test_a_derivation_that_fails_shows_an_error_and_sends_nothing` |
+| `MAX_ITERATIONS = 1_000_001` in `vault-crypto.js` | `assert {'MIN_ITERATIONS': 600000, 'MAX_ITERATIONS': 1000001} == {... 1000000}` | `test_the_browser_limits_are_the_ones_the_server_enforces` |
