@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -21,8 +22,23 @@ from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
 from browser_kit import Tab
 
-# Pinned tags: the suite runs against the real servers, never a fake.
-IMAGES = ["redis:7.4", "valkey/valkey:8.0"]
+ROOT = Path(__file__).parent.parent
+
+
+def _compose_redis_image() -> str:
+    """The redis image of compose.yaml, tag and digest: one pin for the app and the tests."""
+    match = re.search(
+        r"image: (redis:\S+@sha256:[0-9a-f]{64})", (ROOT / "compose.yaml").read_text()
+    )
+    assert match, "compose.yaml does not pin redis by digest"
+    return match.group(1)
+
+
+# Pinned by digest: the suite runs against the real servers, never a fake, and always the same.
+IMAGES = [
+    _compose_redis_image(),
+    "valkey/valkey:8.0@sha256:fcb69dfef81599baefeee6cdd0b8339b61b7983a8ee08d307e44844db5bd7047",
+]
 
 
 @pytest.fixture(scope="session", params=IMAGES, ids=["redis-7.4", "valkey-8.0"])

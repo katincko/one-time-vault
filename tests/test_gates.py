@@ -47,3 +47,18 @@ def test_the_audit_script_audits_the_locked_set_without_the_editable_project() -
     assert "uv export --locked --all-groups" in script
     assert "grep -v '^-e '" in script
     assert "uvx pip-audit --no-deps --disable-pip -r" in script
+
+
+def test_the_test_images_are_pinned_by_digest_and_redis_is_the_one_of_the_compose_file() -> None:
+    from conftest import IMAGES
+
+    compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
+    redis = re.search(r"image: (redis:\S+@sha256:[0-9a-f]{64})", compose)
+    assert redis, "the compose file does not pin redis by digest"
+    assert IMAGES[0] == redis.group(1)
+    for image in IMAGES:
+        assert re.fullmatch(r"[\w./-]+:[\w.]+@sha256:[0-9a-f]{64}", image), image
+
+
+def test_the_readme_says_the_test_images_are_pinned_too() -> None:
+    assert re.search(r"test images.{0,80}pinned by digest", README, re.DOTALL | re.IGNORECASE)

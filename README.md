@@ -153,8 +153,10 @@ What it does not protect against:
   also as a step of its own.
 - **CI hygiene.** Actions are pinned by commit SHA, the workflow has `contents: read` only,
   `setup-uv` caches, `uv sync --locked`, and Dependabot watches `github-actions`, `uv` and `npm`
-  (the TypeScript dev dependency in `package.json`). The Docker base images and the gitleaks image
-  are pinned by digest, and Dependabot does not watch them.
+  (the TypeScript dev dependency in `package.json`). The Docker base images, the gitleaks image
+  and the Redis and Valkey test images are pinned by digest, and Dependabot does not watch them.
+  The test images are pinned by digest too: the Redis one is read from `compose.yaml`, so the
+  tests and the app run the same image (`test_gates.py::test_the_test_images_are_pinned_by_digest_and_redis_is_the_one_of_the_compose_file`).
 - **The README is tested.** The test command below is run by `tests/test_readme.py`, which also
   checks that it names every test file once.
 
