@@ -12,7 +12,10 @@ export const KEY_BYTES = 32;
 export const IV_BYTES = 12;
 export const BLOCK_BYTES = 256;
 export const MAX_TEXT_BYTES = 10 * 1024;
-export const PBKDF2_ITERATIONS = 600_000; // OWASP floor; the server refuses fewer
+// The PBKDF2 cost limits of the server (`keyring.py`); tests/test_browser_iterations.py pins them equal.
+export const MIN_ITERATIONS = 600_000; // OWASP floor; the server refuses fewer
+export const MAX_ITERATIONS = 1_000_000; // the cost lands on the opener's browser
+export const PBKDF2_ITERATIONS = MIN_ITERATIONS;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -144,6 +147,19 @@ export async function decrypt(key, iv, ciphertext) {
 }
 
 /**
+ * @param {unknown} iterations
+ * @returns {iterations is number} a whole number inside the limits
+ */
+export function iterationsAllowed(iterations) {
+  return (
+    typeof iterations === "number" &&
+    Number.isInteger(iterations) &&
+    iterations >= MIN_ITERATIONS &&
+    iterations <= MAX_ITERATIONS
+  );
+}
+
+/**
  * What the browser sends instead of the access password: PBKDF2-SHA256 of the password, salted
  * with the "password" subkey of this secret. The password itself never leaves the page. NFKC
  * makes the same typed password the same bytes on every keyboard and operating system.
@@ -153,6 +169,7 @@ export async function decrypt(key, iv, ciphertext) {
  * @returns {Promise<Bytes>}
  */
 export async function passwordVerifier(password, key, iterations) {
+  if (!iterationsAllowed(iterations)) throw new Error("iterations out of range");
   const { password: salt } = await deriveKeys(key);
   const base = await crypto.subtle.importKey(
     "raw",

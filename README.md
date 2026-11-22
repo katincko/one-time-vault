@@ -227,11 +227,11 @@ Open http://127.0.0.1:8000. `docker compose down -v` stops it and drops the data
 
 ```
 uv run pytest tests/test_access_log.py tests/test_api.py tests/test_browser.py \
-  tests/test_browser_crypto.py tests/test_browser_design.py tests/test_browser_password.py \
-  tests/test_canary_finder.py tests/test_dash_check.py tests/test_gates.py tests/test_headers.py \
-  tests/test_keyring.py tests/test_limits.py tests/test_password.py tests/test_race.py \
-  tests/test_race_processes.py tests/test_readme.py tests/test_request_shape.py \
-  tests/test_storage.py tests/test_storage_hardening.py -q
+  tests/test_browser_crypto.py tests/test_browser_design.py tests/test_browser_iterations.py \
+  tests/test_browser_password.py tests/test_canary_finder.py tests/test_dash_check.py \
+  tests/test_gates.py tests/test_headers.py tests/test_keyring.py tests/test_limits.py \
+  tests/test_password.py tests/test_race.py tests/test_race_processes.py tests/test_readme.py \
+  tests/test_request_shape.py tests/test_storage.py tests/test_storage_hardening.py -q
 ```
 
 Docker must be running: the tests start real `redis:7.4` and `valkey/valkey:8.0` containers, and the
