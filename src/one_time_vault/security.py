@@ -8,6 +8,8 @@ from starlette.datastructures import MutableHeaders
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from one_time_vault.storage import ID_LENGTH
+
 logger = logging.getLogger(__name__)
 
 # `{nonce}` becomes a fresh nonce per response. The page script is the only script, and its nonce
@@ -24,8 +26,12 @@ FIXED_HEADERS = {
     "Cache-Control": "no-store",
 }
 
-# The segment after these prefixes is a secret id: it never goes to a log.
+# A secret id never goes to a log, wherever it sits in the path or query. Two nets: the segment
+# after the id routes (so a malformed id is masked too), and any run of id characters as long as
+# an id or longer (so `//s/<id>`, `/x/../s/<id>`, `?next=<id>` or an id glued to other characters
+# cannot slip past). Routes without an id keep their path, except a 22 character name.
 _ID_PREFIX = re.compile(r"^(/s/|/api/secrets/)[^/]*")
+_ID_SHAPED = re.compile(rf"[A-Za-z0-9_-]{{{ID_LENGTH},}}")
 _UNSAFE = re.compile(r"[^ -~]")
 
 
@@ -36,6 +42,7 @@ def loggable_path(path: str) -> str:
     outside printable ASCII is written as an escape sequence (a backslash and hex digits).
     """
     path = _ID_PREFIX.sub(lambda m: m.group(1) + "<id>", path)
+    path = _ID_SHAPED.sub("<id>", path)
     return _UNSAFE.sub(lambda m: m.group().encode("unicode_escape").decode("ascii"), path)
 
 

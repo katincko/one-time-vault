@@ -8,7 +8,9 @@ that process: it creates, opens and reveals a secret, then searches the captured
 import base64
 import logging
 import os
+import socket
 import time
+from urllib.parse import urlsplit
 
 import httpx
 import pytest
@@ -42,6 +44,40 @@ def test_the_server_log_never_holds_the_id_of_a_secret(live_server: LiveServer) 
     # The access log is on, and it says what happened, only without the id.
     assert b"GET /s/<id> HTTP/1.1" in log
     assert b"POST /api/secrets/<id>/reveal HTTP/1.1" in log
+    assert secret_id.encode() not in log
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [
+        "//s/{id}",
+        "/api/./secrets/{id}",
+        "/x/../s/{id}",
+        "/s/%2F{id}",
+        "/s/./{id}",
+        "/api//secrets/{id}/reveal",
+        "/s/%61{id}%2e",
+        "/x?next={id}",
+    ],
+)
+def test_the_server_log_never_holds_the_id_in_any_form_of_path(
+    live_server: LiveServer, shape: str
+) -> None:
+    secret_id = b64url(os.urandom(16))
+    marker = f"/marker-{secret_id[:6]}"  # proves this very request reached the log
+    target = shape.format(id=secret_id)
+    host = urlsplit(live_server.url)
+    # A raw socket: no client normalizes the path (the dots and slashes reach the server).
+    for path in (target, marker):
+        with socket.create_connection((host.hostname or "", host.port or 80), timeout=10) as sock:
+            sock.sendall(f"GET {path} HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n".encode())
+            while sock.recv(4096):
+                pass
+    deadline = time.time() + 10
+    while marker.encode() not in live_server.log() and time.time() < deadline:
+        time.sleep(0.1)
+    log = live_server.log()
+    assert marker.encode() in log
     assert secret_id.encode() not in log
 
 

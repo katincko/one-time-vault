@@ -122,7 +122,7 @@ That is one sequence from the clone to `passed`. The last line reads `487 passed
 the Chromium download come before). Docker must be running: the tests start real `redis:7.4` and
 `valkey/valkey:8.0` containers.
 
-The count is **487 test cases**. Many tests run twice, once on Redis and once on Valkey, so one
+The count is **503 test cases**. Many tests run twice, once on Redis and once on Valkey, so one
 test function can count as two cases. An older version of this project had 138 tests, and
 [docs/negative-proofs.md](docs/negative-proofs.md) still quotes that number for its lot. A test
 fails when the count in this README is not the real one.

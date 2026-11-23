@@ -195,6 +195,7 @@ Found in the audit before going public (see "Before going public" in
 | Finding | Fix | Commit | Test |
 |---|---|---|---|
 | uvicorn's access log wrote `GET /s/<id>` and `POST /api/secrets/<id>/...` with the client IP | The access log is masked by the same function as the 500 log, whatever flags the server runs with | `d3bbe65` | `test_access_log.py::test_the_server_log_never_holds_the_id_of_a_secret` |
+| The mask only matched paths starting exactly with `/s/` or `/api/secrets/`: `//s/<id>`, `/x/../s/<id>`, `/s/%2F<id>` wrote the whole id | Any run of 22 or more id characters is masked anywhere in the path or query, besides the prefix rule | this commit | `test_access_log.py::test_the_server_log_never_holds_the_id_in_any_form_of_path` |
 | The leak canary only knew some encodings of the key (a hex header with colons or a JSON array of decimals passed) | Structural check of every request: allowed header names, exact body keys | `1481082` | `test_request_shape.py`, `test_browser.py::test_neither_the_text_nor_the_key_leaves_the_browser` |
 | The README said every response has the security headers, but uvicorn answers protocol errors alone | The claim is for what the app produces; `--no-server-header` | `ad076e1` | `test_gates.py::test_the_readme_claims_the_headers_only_for_what_the_app_produces` |
 | Two locked dependencies with known vulnerabilities, and no scan | Both updated; `pip-audit` in `make verify` and in the CI | `ae5e00b` | `test_gates.py::test_the_dependency_audit_is_a_step_of_make_verify_and_of_the_ci` |

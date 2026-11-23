@@ -359,6 +359,15 @@ hex digits) of the restored file is the one of the plant's start. Redis 7.4 runs
 
 The test creates, opens and reveals a secret on the real server process and searches its log.
 
+A later audit found the mask only matched a path that started exactly with `/s/` or `/api/secrets/`.
+`security.py` sha256 `26f1860f9470` after the fix (a net for any run of 22 or more id characters
+was added); the plant was made in the working tree and the file restored from a copy (same sha256).
+Each request is sent on a raw socket, so the dots and slashes reach the server.
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| Before the fix: only the anchored prefix mask (the id-shaped net removed) | `assert b'IF7QFtF1nrDTPdJLggMd4A' not in b'...'` (the real id in the log of the real server) for `//s/<id>`, `/api/./secrets/<id>`, `/x/../s/<id>`, `/s/%2F<id>` and four more shapes, on Redis and on Valkey | `test_access_log.py::test_the_server_log_never_holds_the_id_in_any_form_of_path` |
+
 ### Structural check of the requests (`tests/request_shape.py`, `tests/test_request_shape.py`)
 
 The canary finder looks for known encodings, so these two leaks passed it. `create.js` sha256
