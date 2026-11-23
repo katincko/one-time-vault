@@ -180,7 +180,11 @@ def create_app(
     create_limit: int = 20,
     create_window_seconds: int = 3600,
     trusted_hops: int = 0,
+    client_ip_header: str | None = None,
 ) -> FastAPI:
+    if client_ip_header is not None and trusted_hops > 0:
+        # Two answers to "who is the client" would leave one of them unused without a word.
+        raise ValueError("OTV_CLIENT_IP_HEADER and OTV_TRUSTED_HOPS cannot both be set")
     storage = SecretStorage(redis)
     templates = Jinja2Templates(directory=HERE / "templates")
 
@@ -193,7 +197,12 @@ def create_app(
     # Innermost first. The limiter sits outside the body limit so a refused body still counts.
     app.add_middleware(BodyLimitMiddleware, max_bytes=MAX_BODY_BYTES)
     limiter = CreateLimiter(redis, limit=create_limit, window_seconds=create_window_seconds)
-    app.add_middleware(CreateLimitMiddleware, limiter=limiter, trusted_hops=trusted_hops)
+    app.add_middleware(
+        CreateLimitMiddleware,
+        limiter=limiter,
+        trusted_hops=trusted_hops,
+        ip_header=client_ip_header,
+    )
     app.add_middleware(SecurityHeadersMiddleware)
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 
@@ -266,4 +275,5 @@ def app_from_env() -> FastAPI:
         create_limit=int(env.get("OTV_CREATE_LIMIT", "20")),
         create_window_seconds=int(env.get("OTV_CREATE_WINDOW_SECONDS", "3600")),
         trusted_hops=int(env.get("OTV_TRUSTED_HOPS", "0")),
+        client_ip_header=env.get("OTV_CLIENT_IP_HEADER") or None,
     )

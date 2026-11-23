@@ -118,11 +118,11 @@ uv run pytest tests/test_access_log.py tests/test_api.py tests/test_browser.py \
   tests/test_request_shape.py tests/test_storage.py tests/test_storage_hardening.py -q
 ```
 
-That is one sequence from the clone to `passed`. The last line reads `489 passed`, after about 2 minutes on a laptop (the Docker image pulls and
+That is one sequence from the clone to `passed`. The last line reads `508 passed`, after about 2 minutes on a laptop (the Docker image pulls and
 the Chromium download come before). Docker must be running: the tests start real `redis:7.4` and
 `valkey/valkey:8.0` containers.
 
-The count is **505 test cases**. Many tests run twice, once on Redis and once on Valkey, so one
+The count is **524 test cases**. Many tests run twice, once on Redis and once on Valkey, so one
 test function can count as two cases. An older version of this project had 138 tests, and
 [docs/negative-proofs.md](docs/negative-proofs.md) still quotes that number for its lot. A test
 fails when the count in this README is not the real one.

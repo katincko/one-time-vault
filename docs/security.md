@@ -77,6 +77,7 @@ The default values are not tested.
 | `OTV_SERVER_KEYS` | Required. `2:<base64url>,1:<base64url>`, 32 bytes or more each. The first one seals new secrets; older versions stay listed until their secrets are gone. The app does not boot without it (`test_keyring.py::test_bad_server_keys_refuse_to_boot`, `test_keyring.py::test_the_real_server_process_does_not_start_without_the_keys`). |
 | `OTV_CREATE_LIMIT`, `OTV_CREATE_WINDOW_SECONDS` | Creations per client IP per window, default 20 per 3600 s |
 | `OTV_TRUSTED_HOPS` | Number of proxies in front. The client is the Nth `X-Forwarded-For` entry from the right, so a forged header cannot pick the bucket. With 0 (default) the header is ignored. |
+| `OTV_CLIENT_IP_HEADER` | A header that the edge always overwrites with the visitor's address, such as `CF-Connecting-IP` behind Cloudflare. When set, the client is that header's single value and neither the socket peer nor `X-Forwarded-For` is read. A request without one valid address in it is counted in a bucket of its own (`no-client-ip`), never in the proxy's. It cannot be set together with `OTV_TRUSTED_HOPS`: the app refuses to boot. Empty means unset. |
 
 ## Threat model
 
@@ -93,6 +94,7 @@ What it protects against:
 | The server learning the password | Only the PBKDF2 verifier is sent; the server stores a keyed hash of it | `test_browser_password.py::test_the_password_never_reaches_the_server`, `test_password.py::test_the_server_stores_a_keyed_hash_never_the_verifier` |
 | Password guessing | The fifth wrong attempt deletes the secret, also under simultaneous tries | `test_password.py::test_simultaneous_wrong_passwords_are_counted_exactly_to_the_limit` |
 | A forged `X-Forwarded-For` dodging the creation limit | The client is taken from the trusted end of the header | `test_limits.py::test_a_forged_forwarded_header_does_not_pick_the_bucket`, `test_limits.py::test_the_real_server_ignores_a_forged_header_and_answers_429_and_413` |
+| A forged `CF-Connecting-IP` (or a missing one) dodging the creation limit | With `OTV_CLIENT_IP_HEADER`, only the edge writes the header; a missing or invalid value shares one bucket, never the proxy's | `test_limits.py::test_the_client_ip_header_picks_the_bucket_not_the_peer_or_forwarded_for`, `test_limits.py::test_a_missing_client_ip_header_fails_closed_in_its_own_bucket`, `test_limits.py::test_the_real_server_counts_by_the_client_ip_header` |
 | Injected inline script | Every response, 500s included, carries a CSP with a fresh nonce | `test_headers.py::test_the_nonce_is_new_on_every_response_and_matches_the_script_tag`, `test_browser_password.py::test_the_pages_run_under_the_csp_without_a_violation` |
 
 What it does not protect against:
@@ -161,7 +163,7 @@ What it does not protect against:
   secrets are gone. A missing version is a 500, never a wrong password, so it does not burn
   attempts (`test_password.py::test_a_dropped_key_is_a_server_error_that_does_not_burn_attempts`).
 - **Counting at the proxy edge.** IPv6 is counted per /64; an IPv4 mapped into IPv6 counts as that
-  IPv4 address. The app must only be reachable through the proxies counted in `OTV_TRUSTED_HOPS`.
+  IPv4 address. The app must only be reachable through the proxies counted in `OTV_TRUSTED_HOPS`. With `OTV_CLIENT_IP_HEADER` the header is only as trustworthy as that rule: the app must be reachable through the edge that overwrites it and nothing else, or a caller can write the header and pick its bucket.
 - **Compose publishes only the app, on 127.0.0.1.** Redis has no published port.
   It runs with `--maxmemory 64mb --maxmemory-policy noeviction`, so when memory is full, creating
   fails instead of a secret being dropped early. No test fills the memory.

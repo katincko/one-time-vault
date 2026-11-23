@@ -1,22 +1,27 @@
 """Spec test 10: the per-IP creation limit (429) and the size limit (413)."""
 
 import asyncio
+import os
 import secrets
+import subprocess
+import sys
 from collections.abc import AsyncIterator, Callable, Iterator
 
 import httpx
 import pytest
 import pytest_asyncio
+from redis import Redis as SyncRedis
 from redis.asyncio import Redis
 
 from conftest import SERVER_KEYS, LiveServer, run_server
-from one_time_vault.app import create_app
+from one_time_vault.app import app_from_env, create_app
 from one_time_vault.keyring import Keyring
-from one_time_vault.ratelimit import client_ip
+from one_time_vault.ratelimit import NO_CLIENT_IP, client_ip
 from test_api import body
 
 LIMIT = 3
 PEER = "10.0.0.9"  # the proxy, as the socket sees it
+CF = "CF-Connecting-IP"
 
 MakeClient = Callable[..., httpx.AsyncClient]
 
@@ -25,13 +30,16 @@ MakeClient = Callable[..., httpx.AsyncClient]
 async def make_client(redis: Redis) -> AsyncIterator[MakeClient]:
     opened: list[httpx.AsyncClient] = []
 
-    def make(*, hops: int = 0, peer: str = PEER, limit: int = LIMIT) -> httpx.AsyncClient:
+    def make(
+        *, hops: int = 0, peer: str = PEER, limit: int = LIMIT, ip_header: str | None = None
+    ) -> httpx.AsyncClient:
         app = create_app(
             redis,
             Keyring.parse(SERVER_KEYS),
             create_limit=limit,
             create_window_seconds=600,
             trusted_hops=hops,
+            client_ip_header=ip_header,
         )
         transport = httpx.ASGITransport(app=app, client=(peer, 5000))
         c = httpx.AsyncClient(transport=transport, base_url="http://vault.test")
@@ -248,3 +256,112 @@ def test_the_real_server_ignores_a_forged_header_and_answers_429_and_413(
         headers={"X-Forwarded-For": "198.51.100.1, 203.0.113.250"},
     )
     assert big.status_code == 413
+
+
+# The client IP header (OTV_CLIENT_IP_HEADER): one header set by the edge, e.g. Cloudflare.
+
+
+async def test_the_client_ip_header_picks_the_bucket_not_the_peer_or_forwarded_for(
+    make_client: MakeClient,
+) -> None:
+    """Behind a tunnel every request comes from the same peer and X-Forwarded-For is rewritten."""
+    client = make_client(ip_header=CF)
+    one = {CF: "203.0.113.5", "X-Forwarded-For": "172.18.0.1"}
+    assert await statuses(client, LIMIT + 1, **one) == [201] * LIMIT + [429]
+    two = {CF: "203.0.113.6", "X-Forwarded-For": "172.18.0.1"}
+    assert await statuses(client, 1, **two) == [201]  # same peer, same forwarded-for, own count
+    forged = {CF: "203.0.113.5", "X-Forwarded-For": "198.51.100.77"}
+    assert await statuses(client, 1, **forged) == [429]  # forwarded-for does not move the bucket
+
+
+async def test_a_missing_client_ip_header_fails_closed_in_its_own_bucket(
+    make_client: MakeClient, redis: Redis
+) -> None:
+    """Without the header the request is not counted as the proxy: it shares one other bucket."""
+    client = make_client(ip_header=CF)
+    assert await statuses(client, LIMIT + 1) == [201] * LIMIT + [429]
+    assert await statuses(client, 1, **{CF: "not an ip"}) == [429]  # same bucket as missing
+    assert await statuses(client, 1, **{CF: "203.0.113.9"}) == [201]  # a real client is not hit
+    keys = sorted([k async for k in redis.scan_iter("ovv:rl:*")])
+    assert keys == [b"ovv:rl:203.0.113.9", f"ovv:rl:{NO_CLIENT_IP}".encode()]
+
+
+@pytest.mark.parametrize(
+    ("raw", "bucket"),
+    [
+        ([], NO_CLIENT_IP),
+        ([b"203.0.113.5"], "203.0.113.5"),
+        ([b" 203.0.113.5 "], "203.0.113.5"),
+        ([b"::ffff:203.0.113.5"], "203.0.113.5"),
+        ([b"2001:db8:1:2:aaaa:bbbb:cccc:dddd"], "2001:db8:1:2::/64"),
+        ([b""], NO_CLIENT_IP),
+        ([b"garbage"], NO_CLIENT_IP),
+        ([b"203.0.113.5, 198.51.100.1"], NO_CLIENT_IP),  # a list is not what the edge sends
+        ([b"203.0.113.5", b"198.51.100.1"], NO_CLIENT_IP),  # neither is the header twice
+    ],
+)
+def test_client_ip_from_the_header(raw: list[bytes], bucket: str) -> None:
+    headers = [(b"cf-connecting-ip", v) for v in raw] + [(b"x-forwarded-for", b"7.7.7.7")]
+    scope = {"type": "http", "client": (PEER, 1), "headers": headers}
+    assert client_ip(scope, 0, "CF-Connecting-IP") == bucket
+
+
+def test_the_header_and_trusted_hops_together_refuse_to_boot(redis: Redis) -> None:
+    with pytest.raises(ValueError, match="OTV_CLIENT_IP_HEADER and OTV_TRUSTED_HOPS"):
+        create_app(redis, Keyring.parse(SERVER_KEYS), trusted_hops=1, client_ip_header=CF)
+
+
+def test_the_app_factory_reads_the_header_and_refuses_both_options(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OTV_SERVER_KEYS", SERVER_KEYS)
+    monkeypatch.setenv("OTV_CLIENT_IP_HEADER", CF)
+    monkeypatch.setenv("OTV_TRUSTED_HOPS", "1")
+    with pytest.raises(ValueError, match="OTV_CLIENT_IP_HEADER and OTV_TRUSTED_HOPS"):
+        app_from_env()
+    monkeypatch.setenv("OTV_TRUSTED_HOPS", "0")
+    app_from_env()  # the header alone boots
+    monkeypatch.setenv("OTV_CLIENT_IP_HEADER", "")
+    monkeypatch.setenv("OTV_TRUSTED_HOPS", "1")
+    app_from_env()  # an empty header setting is the same as none
+
+
+def test_the_real_server_process_does_not_start_with_both_options() -> None:
+    env = {
+        **os.environ,
+        "OTV_SERVER_KEYS": SERVER_KEYS,
+        "OTV_CLIENT_IP_HEADER": CF,
+        "OTV_TRUSTED_HOPS": "1",
+    }
+    proc = subprocess.run(
+        [sys.executable, "-m", "uvicorn", "--factory", "one_time_vault.app:app_from_env",
+         "--port", "0"],
+        env=env, capture_output=True, text=True, timeout=30,
+    )  # fmt: skip
+    assert proc.returncode != 0
+    assert "OTV_CLIENT_IP_HEADER and OTV_TRUSTED_HOPS" in proc.stderr
+
+
+@pytest.fixture(scope="module")
+def header_server(
+    server_url: str, tmp_path_factory: pytest.TempPathFactory
+) -> Iterator[LiveServer]:
+    """The real process behind Cloudflare: the client is CF-Connecting-IP, the limit is 3."""
+    env = {"OTV_CREATE_LIMIT": "3", "OTV_CLIENT_IP_HEADER": CF}
+    with run_server(server_url, tmp_path_factory.mktemp("cf") / "server.log", env) as server:
+        yield server
+
+
+def test_the_real_server_counts_by_the_client_ip_header(header_server: LiveServer) -> None:
+    def post(headers: dict[str, str]) -> int:
+        url = header_server.url + "/api/secrets"
+        return httpx.post(url, json=body(), headers=headers).status_code
+
+    tunnel = {"X-Forwarded-For": "172.18.0.1"}  # what Traefik leaves behind the tunnel
+    visitor = f"203.0.113.{secrets.randbelow(200) + 20}"
+    assert [post({**tunnel, CF: visitor}) for _ in range(4)] == [201, 201, 201, 429]
+    assert post({**tunnel, CF: "203.0.113.6"}) == 201  # another visitor, same peer
+    missing = [post(tunnel) for _ in range(4)]
+    assert missing == [201, 201, 201, 429]  # its own bucket, never the peer's
+    with SyncRedis.from_url(header_server.redis_url, socket_timeout=10) as r:
+        assert r.exists("ovv:rl:127.0.0.1") == 0  # the peer was never a bucket

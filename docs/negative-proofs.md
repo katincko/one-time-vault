@@ -479,3 +479,19 @@ digits) of the restored file equals the one at the start.
 Without a plant the smoke prints `ok:` for create (201), first read (200), the same iv and
 ciphertext back and second read (404), then `compose smoke: passed`, exit 0, in about 3 minutes
 on a laptop (most of it the image build).
+
+## Client IP header (`OTV_CLIENT_IP_HEADER`, `tests/test_limits.py`)
+
+Behind Cloudflare, cloudflared and Traefik, the app sees one peer and an `X-Forwarded-For` that
+Traefik rewrote to the tunnel's address, so every visitor fell in one creation bucket. The edge
+puts the visitor's address in `CF-Connecting-IP`. Each plant was made in the working tree only and
+the file restored from a copy; the sha256 (first 12 hex digits) of the restored file equals the
+one at the start: `ratelimit.py` `17fb00774b1c`, `app.py` `dd59013ebcd1`.
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| The header branch of `client_ip` never taken (`if False:`), so the peer decides again | `test_the_client_ip_header_picks_the_bucket_not_the_peer_or_forwarded_for` failed on Redis and on Valkey, and every case of `test_client_ip_from_the_header` | those two |
+| A missing or invalid header falls back to the peer (`return found or str(scope['client'][0])`) | `AssertionError: assert [b'ovv:rl:10....:203.0.113.9'] == [b'ovv:rl:203...no-client-ip']`: the proxy's address became a bucket | `test_a_missing_client_ip_header_fails_closed_in_its_own_bucket` |
+| An empty `OTV_CLIENT_IP_HEADER` read as set (`or None` removed in `app_from_env`) | `ValueError: OTV_CLIENT_IP_HEADER and OTV_TRUSTED_HOPS cannot both be set` with the header empty | `test_the_app_factory_reads_the_header_and_refuses_both_options` |
+
+Without a plant, `tests/test_limits.py` gives `66 passed`.
