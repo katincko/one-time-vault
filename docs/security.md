@@ -13,7 +13,9 @@ two canaries (the text and the generated key) are searched, in several encodings
 request the browser makes, in the server log and in every Redis key
 (`tests/test_browser.py::test_neither_the_text_nor_the_key_leaves_the_browser`), and every request
 the page sends is checked as a structure, whatever the encoding: header names from an allowed
-list and exactly the expected keys in each API body (`tests/request_shape.py`). The claim
+list, each header value against the pattern Chromium sends, exactly the expected keys in each API
+body, and every body value against the server's own request model, so lengths and padding are
+exact (`tests/request_shape.py`). The claim
 depends on the browser receiving the JavaScript in this repository (see the threat model).
 
 ## Guarantees and the tests behind them

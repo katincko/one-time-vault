@@ -370,6 +370,19 @@ The canary finder looks for known encodings, so these two leaks passed it. `crea
 | `create.js` sends the key as a JSON array of decimals in a body to `/api/secrets/zzz` | `POST /api/secrets/zzz is not a request the page may make` | same |
 | The same two leaks as plain data, plus an extra body key, a text in `expires_in` and an array in `iv` | `header x-trace is not allowed`, `body keys [...] are not one of [...]`, `body field expires_in ...`, `body field iv is not a base64url string` | `test_request_shape.py` (each of its tests) |
 
+A later audit found a third leak that passed both checks: the key in base32 in the value of an
+allowed header (`accept`, `user-agent`), or in base32 appended to `iv`, because only header names
+and the base64url alphabet were checked. Header values now have a pattern each, and body values
+are validated by the server's own `CreateRequest` and `RevealRequest`. `request_shape.py` sha256
+`dfcdf72a2cdc` after the fix; each plant was made in the working tree and the file restored from
+a copy (same sha256).
+
+| Planted bug | Red output (reason) | Test |
+|---|---|---|
+| Before the fix, with no plant: only names and the base64url alphabet checked | `request_problems` returned `[]` for the key in base32 in `accept`, `user-agent`, and appended to `iv` | the two new tests below |
+| The header value pattern check replaced by `if False` | `AssertionError: accept` (`[] == ['header accept has a value that is not the expected one']`) | `test_the_key_in_the_value_of_an_allowed_header_is_refused` |
+| The body model validation replaced by `pass` | `AssertionError: iv`, `AssertionError: 0` (ciphertext of 0 bytes), and a verifier array accepted | `test_the_key_in_the_value_of_a_legitimate_field_in_any_encoding_is_refused`, `test_a_ciphertext_or_iv_of_the_wrong_length_is_refused`, `test_the_key_hidden_in_a_legitimate_field_is_refused`, `test_the_reveal_call_with_extra_keys_or_a_wrong_type_is_refused` |
+
 A body key planted in the real page cannot reach the check: the server answers 422 to an extra
 key (`extra="forbid"`), the flow stops earlier. The body rules are proven on the plain data above.
 
