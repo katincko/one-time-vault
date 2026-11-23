@@ -129,7 +129,7 @@ uv run pytest tests/test_access_log.py tests/test_api.py tests/test_browser.py \
   tests/test_request_shape.py tests/test_storage.py tests/test_storage_hardening.py -q
 ```
 
-That is one sequence from the clone to `passed`. The last line reads `508 passed`, after about 2 minutes on a laptop (the Docker image pulls and
+That is one sequence from the clone to `passed`. The last line reads `524 passed`, after about 2 minutes on a laptop (the Docker image pulls and
 the Chromium download come before). Docker must be running: the tests start real `redis:7.4` and
 `valkey/valkey:8.0` containers.
 
