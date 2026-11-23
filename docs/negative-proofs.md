@@ -3,6 +3,9 @@
 Each row: a bug planted in `src/` (or in the page JS), the named test run against real Redis 7.4
 (first red lines shown), bug removed with `git checkout`, suite green again.
 
+Counts such as "138 tests" below are the size of the suite in the lot where the row was written,
+not today's. Today's count is in the README and a test fails when it is wrong.
+
 ## Lot 1 (storage layer)
 
 | Planted bug | Red output (reason) | Test |
@@ -127,7 +130,7 @@ Run on Redis 7.4 (`-k redis-7.4`), `src/` restored with `git checkout` after eac
 | `newKey()` always the same 32 bytes | `AssertionError: a key was used twice`, `assert 1 == 4` | same |
 | AES key derived with `extractable: true` | `assert True is False` on `extractable` | `test_browser_crypto.py::test_the_derived_aes_key_is_not_extractable` |
 
-Before these tests, planting the zero IV and the fixed key left all 138 tests green: both still
+Before these tests, planting the zero IV and the fixed key left all 138 tests of that old lot green: both still
 round-trip, so only looking at what was made can catch them.
 | `/api/secrets/` catch-all answers a different 404 body | `Left contains 10 more items` (every probe differs from the reveal 404) | `test_api.py::test_malformed_routes_under_api_secrets_get_the_same_404` |
 
@@ -375,7 +378,7 @@ key (`extra="forbid"`), the flow stops earlier. The body rules are proven on the
 | Planted bug | Red output (reason) | Test |
 |---|---|---|
 | `"--no-server-header"` removed from the Dockerfile `CMD` (sha256 `ce927ac3cff9`) | `assert '"--no-server-header"' in '["/app/.venv/bin/uvicorn", ...]'` | `test_uvicorn_does_not_name_itself_in_the_image_or_in_the_readme_command` |
-| README text back to "Every response" | `assert 'Every response the app produces' in '# one-time-vault ...'` | `test_the_readme_claims_the_headers_only_for_what_the_app_produces` |
+| Security doc text back to "Every response" (the claim moved from the README to `docs/security.md`) | `assert 'Every response the app produces' in '# Security and guarantees ...'` | `test_the_readme_claims_the_headers_only_for_what_the_app_produces` |
 
 The 400 without headers was seen by hand on the real server (`GARBAGE` as a request line): `400 Bad
 Request`, `content-type`, `Connection: close`, nothing else. No test.
@@ -405,3 +408,35 @@ With the updated lock the script prints `No known vulnerabilities found` and exi
 | The range check in `askForPassword` replaced by `false` | `unexpected value "This secret needs a password."` (the form opens for iterations 1, 2^31 and text) | `test_an_iteration_count_outside_the_limits_is_refused_and_nothing_more_is_sent` |
 | The `try`/`catch` around `passwordVerifier` removed | `unexpected value "Checking the password."` (the page stays on it) | `test_a_derivation_that_fails_shows_an_error_and_sends_nothing` |
 | `MAX_ITERATIONS = 1_000_001` in `vault-crypto.js` | `assert {'MIN_ITERATIONS': 600000, 'MAX_ITERATIONS': 1000001} == {... 1000000}` | `test_the_browser_limits_are_the_ones_the_server_enforces` |
+
+### README, security doc and policy (`tests/test_readme.py`, `tests/test_gates.py`)
+
+The README was cut and its guarantees, threat model and findings moved to `docs/security.md`. The
+two claims that `test_gates.py` checked in the README are now checked in the security doc. Each
+plant was made in the working tree only and the file was restored from a copy; the sha256 (first
+12 hex digits) of the restored file equals the one at the start. Redis 7.4 and Valkey 8.0 are not
+involved: these tests read files.
+
+Before the README was rewritten the five new tests were red for the right reason: `python -c` on
+README line 223, `docker compose down -v` without a value, no `**N test cases**`, no link to
+`docs/security.md`, no `SECURITY.md`.
+
+| Planted bug (file, sha256) | Red output (reason) | Test |
+|---|---|---|
+| `uv run python -c` back to `python -c` in the README (`a05aec05c72a`) | `README.md:25: export OTV_SERVER_KEYS="1:$(python -c ...` | `test_python_in_a_pasted_command_is_uv_run_python` |
+| Same plant in the comment of `compose.yaml` (`7f398328832a`) | `compose.yaml:2: #   export OTV_SERVER_KEYS=...(python -c ...` | same |
+| `docker compose down -v` without the `OTV_SERVER_KEYS=unused` prefix (`a05aec05c72a`) | `AssertionError: ['docker compose down -v']` | `test_compose_down_in_the_readme_runs_in_a_shell_without_the_keys` |
+| `**483 test cases**` in the README, 484 collected (`a05aec05c72a`) | `assert 483 == 484` | `test_the_readme_test_count_is_the_real_one` |
+| A screenshot link to a file that does not exist (`a05aec05c72a`) | `FileNotFoundError: ... docs/img/9-gone.png` | `test_the_readme_links_the_security_doc_and_the_screenshots_exist` |
+| The link to `docs/security.md` changed to `docs/nope.md` (`a05aec05c72a`) | `assert '(docs/security.md)' in '# one-time-vault ...'` | same |
+| An e-mail address added to `SECURITY.md` (`ec0db2b76c38`) | `assert '@' not in '# Security ...xample.com\n'` | `test_the_security_policy_uses_the_private_advisory_form_and_has_no_email` |
+| "private vulnerability reporting" replaced by "a form" in `SECURITY.md` (`ec0db2b76c38`) | `assert 'private vulnerability reporting' in "# security policy ..."` | same |
+| "Every response the app produces" cut from `docs/security.md` (`a81e88a62a02`) | `assert 'Every response the app produces' in '# Security and guarantees ...'` | `test_the_readme_claims_the_headers_only_for_what_the_app_produces` |
+| Every "pinned by digest" removed from `docs/security.md` (`a81e88a62a02`) | `AssertionError: assert None` | `test_the_readme_says_the_test_images_are_pinned_too` |
+
+A first plant of that last test, removing only the sentence about the test images, stayed green:
+the pattern also matches two other lines of the doc. So the test only goes red when all of them
+are gone. It is a weak check that was already weak in the README, and it was left as it was.
+
+The count test cannot be made simpler: the number is what pytest collects, so the test runs
+`pytest --collect-only` over the named files, the way the command test above does.
