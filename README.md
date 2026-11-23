@@ -3,15 +3,26 @@
 [![CI](https://github.com/katincko/one-time-vault/actions/workflows/ci.yml/badge.svg)](https://github.com/katincko/one-time-vault/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A password sent by chat or e-mail stays there for good. This vault gives you a link that opens
-once: the browser encrypts the text, the server stores ciphertext it cannot read, and the
-secret is deleted when it is read.
+Share a secret through an encrypted link that opens only once. A small web app you host yourself.
+
+- **The server cannot read it.** Your browser encrypts the text before it is sent; the server
+  only keeps encrypted data.
+- **It opens once.** The first read deletes the secret.
+- **Link previews do not spend it.** Slack, WhatsApp and other chat apps open links on their own to
+  build a preview. Here the secret only comes out after a click on "Reveal".
+- **Optional password.** Five wrong tries delete the secret.
+
+Use it to send a password, an API key or a recovery code by chat or e-mail without leaving it in
+the history for good.
+
+[Run it](#run-it) | [How it works](#how-it-works) | [Security](#security-at-a-glance) | [Tests](#tests)
+
+**Try it live: [vault.siriusoftware.com.br](https://vault.siriusoftware.com.br)** (a public demo:
+do not paste a real secret there, host your own for that)
 
 | Create the link | Open and reveal | Dark theme, phone |
 |---|---|---|
 | ![Creating a secret](docs/img/1-create.png) | ![Revealing a secret](docs/img/2-reveal.png) | ![The phone layout in dark theme](docs/img/3-phone-dark.png) |
-
-The pictures come from the real app: `uv run python scripts/screenshots.py` makes them again.
 
 ## Run it
 
@@ -144,6 +155,9 @@ that the second read is a 404, and takes it all down. To run it locally (Docker 
 ```
 uv run --no-project python scripts/compose_smoke.py
 ```
+
+The pictures at the top come from the real app: `uv run python scripts/screenshots.py` makes them
+again.
 
 ## Good practices
 
