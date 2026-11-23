@@ -462,3 +462,20 @@ are gone. It is a weak check that was already weak in the README, and it was lef
 
 The count test cannot be made simpler: the number is what pytest collects, so the test runs
 `pytest --collect-only` over the named files, the way the command test above does.
+
+## Compose smoke (`scripts/compose_smoke.py`, `tests/test_gates.py`)
+
+The smoke runs the real `compose.yaml` (the app image built from the working tree, Redis 7.4 by
+digest), so a bug planted in `src/` reaches it through `--build`. Each plant was made in the
+working tree only and restored with `git checkout` or from a copy; the sha256 (first 12 hex
+digits) of the restored file equals the one at the start.
+
+| Planted bug (file, sha256) | Red output (reason) | Test |
+|---|---|---|
+| `redis.call('DEL', KEYS[1])` removed from the `REVEAL` script (`src/one_time_vault/scripts.py`, `82cf4f12e6e7`) | `FAILED: AssertionError('second read answers 404 (got 200)')`, exit 1, then the compose was taken down | `scripts/compose_smoke.py` |
+| `setup-uv` pinned by the tag `@v10` instead of the SHA (`.github/workflows/ci.yml`, `3d75d06a46b9`) | `AssertionError: astral-sh/setup-uv@v10` | `test_gates.py::test_every_action_of_the_ci_is_pinned_by_commit_sha` |
+| The compose smoke step of the CI replaced by `echo skipped` (`.github/workflows/ci.yml`, `3d75d06a46b9`) | `assert 'run: uv run --no-project python scripts/compose_smoke.py' in '...run: echo skipped\n'` | `test_gates.py::test_the_ci_runs_the_compose_smoke_as_its_own_job` |
+
+Without a plant the smoke prints `ok:` for create (201), first read (200), the same iv and
+ciphertext back and second read (404), then `compose smoke: passed`, exit 0, in about 3 minutes
+on a laptop (most of it the image build).

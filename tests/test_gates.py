@@ -63,3 +63,22 @@ def test_the_test_images_are_pinned_by_digest_and_redis_is_the_one_of_the_compos
 
 def test_the_readme_says_the_test_images_are_pinned_too() -> None:
     assert re.search(r"test images.{0,80}pinned by digest", SECURITY_DOC, re.DOTALL | re.IGNORECASE)
+
+
+CI = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+
+def test_the_ci_runs_the_compose_smoke_as_its_own_job() -> None:
+    job = re.search(r"\n  compose-smoke:\n(.*?)(?=\n  \S|\Z)", CI, re.DOTALL)
+    assert job, "no compose-smoke job in the CI"
+    assert "run: uv run --no-project python scripts/compose_smoke.py" in job.group(1)
+    script = (ROOT / "scripts" / "compose_smoke.py").read_text(encoding="utf-8")
+    assert '"up", "--build"' in script and '"--wait"' in script
+    assert '"down", "--volumes"' in script
+
+
+def test_every_action_of_the_ci_is_pinned_by_commit_sha() -> None:
+    uses = re.findall(r"uses: (\S+)", CI)
+    assert len(uses) >= 5, uses
+    for action in uses:
+        assert re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", action), action

@@ -4,7 +4,7 @@
 # asks PyPI for known vulnerabilities, so it needs the network.
 TEST_FILES := $(sort $(wildcard tests/test_*.py))
 
-.PHONY: verify
+.PHONY: verify compose-smoke
 verify:
 	uv run ruff check .
 	uv run ruff format --check .
@@ -14,3 +14,7 @@ verify:
 	sh scripts/audit.sh
 	sh scripts/gitleaks.sh
 	uv run python scripts/check_dashes.py
+
+# The real compose.yaml, end to end (CI runs it as its own job). Needs Docker and port 8000.
+compose-smoke:
+	uv run --no-project python scripts/compose_smoke.py

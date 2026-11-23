@@ -118,11 +118,11 @@ uv run pytest tests/test_access_log.py tests/test_api.py tests/test_browser.py \
   tests/test_request_shape.py tests/test_storage.py tests/test_storage_hardening.py -q
 ```
 
-That is one sequence from the clone to `passed`. The last line reads `487 passed`, after about 2 minutes on a laptop (the Docker image pulls and
+That is one sequence from the clone to `passed`. The last line reads `489 passed`, after about 2 minutes on a laptop (the Docker image pulls and
 the Chromium download come before). Docker must be running: the tests start real `redis:7.4` and
 `valkey/valkey:8.0` containers.
 
-The count is **503 test cases**. Many tests run twice, once on Redis and once on Valkey, so one
+The count is **505 test cases**. Many tests run twice, once on Redis and once on Valkey, so one
 test function can count as two cases. An older version of this project had 138 tests, and
 [docs/negative-proofs.md](docs/negative-proofs.md) still quotes that number for its lot. A test
 fails when the count in this README is not the real one.
@@ -136,6 +136,15 @@ make verify
 It runs ruff, ruff format, mypy, `tsc`, the suite, a dependency audit, gitleaks and a dash check.
 Without `make`, run the steps of the `Makefile` one by one.
 
+CI also runs the real `compose.yaml` in a job of its own: `scripts/compose_smoke.py` builds and
+starts it, waits for the healthchecks, creates a secret through the API, reads it once, checks
+that the second read is a 404, and takes it all down. To run it locally (Docker running, port
+8000 free):
+
+```
+uv run --no-project python scripts/compose_smoke.py
+```
+
 ## Good practices
 
 - **Negative proofs.** Each guarding test was run with the bug planted, shown red for the right
@@ -144,13 +153,6 @@ Without `make`, run the steps of the `Makefile` one by one.
 - **Harnesses that check themselves.** The race harness must report violations on a naive storage.
 - **One gate, pinned inputs.** Actions pinned by commit SHA, images by digest, `uv sync --locked`.
 - **The README is tested.** Its commands, its test count and its links have tests.
-
-## Not done
-
-- **No demo.** There is no hosted instance and no deployment configuration. The repository is
-  private.
-- **No live deployment checks**: Compose was run by hand (create, read, second read 404, down); no
-  test drives it.
 
 ## Credits and license
 
