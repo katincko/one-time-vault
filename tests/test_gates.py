@@ -1,4 +1,4 @@
-"""The parts of the delivery that are text in a file: server flags, the README's claims.
+"""The parts of the delivery that are text in a file: server flags, README and doc claims.
 
 Each check reads the file the operator or the CI really uses, so a flag dropped from the
 Dockerfile or the README command turns a test red.
@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 DOCKERFILE = (ROOT / "Dockerfile").read_text(encoding="utf-8")
 README = (ROOT / "README.md").read_text(encoding="utf-8")
+SECURITY_DOC = (ROOT / "docs" / "security.md").read_text(encoding="utf-8")
 
 
 def readme_uvicorn_command() -> str:
@@ -30,8 +31,8 @@ def test_uvicorn_does_not_name_itself_in_the_image_or_in_the_readme_command() ->
 
 
 def test_the_readme_claims_the_headers_only_for_what_the_app_produces() -> None:
-    assert "Every response the app produces" in README
-    assert re.search(r"protocol error.{0,200}uvicorn", README, re.DOTALL)
+    assert "Every response the app produces" in SECURITY_DOC
+    assert re.search(r"protocol error.{0,200}uvicorn", SECURITY_DOC, re.DOTALL)
 
 
 def test_the_dependency_audit_is_a_step_of_make_verify_and_of_the_ci() -> None:
@@ -61,4 +62,4 @@ def test_the_test_images_are_pinned_by_digest_and_redis_is_the_one_of_the_compos
 
 
 def test_the_readme_says_the_test_images_are_pinned_too() -> None:
-    assert re.search(r"test images.{0,80}pinned by digest", README, re.DOTALL | re.IGNORECASE)
+    assert re.search(r"test images.{0,80}pinned by digest", SECURITY_DOC, re.DOTALL | re.IGNORECASE)

@@ -1,5 +1,5 @@
 # App and Redis. The server keys are required and are not in this file:
-#   export OTV_SERVER_KEYS="1:$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+#   export OTV_SERVER_KEYS="1:$(uv run python -c 'import secrets; print(secrets.token_urlsafe(32))')"
 #   docker compose up --build
 services:
   redis:
